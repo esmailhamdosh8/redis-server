@@ -4,13 +4,18 @@ import threading
 
 def handle_client(conn):
     while True:
-        chunk = conn.recv(1024)
+        chunk: bytes = conn.recv(1024)
         if not chunk:
             return
         requests = chunk.split(b"\r\n")
+        previous = b""
         for request in requests:
+            if request.startswith((b"*", b"$")): continue
             if request == b'PING':
                 conn.sendall(b"+PONG\r\n")
+            elif previous == b"ECHO":
+                conn.sendall(f"${len(request)}\r\n".encode() + request + b"\r\n")
+            previous = request
 
 
 def main():
