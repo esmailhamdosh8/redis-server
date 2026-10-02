@@ -1,21 +1,65 @@
 import socket  # noqa: F401
 import threading
 
+cache = {}
+
+
+def build_response(requests: list[bytearray]):
+    response = bytearray()
+    n = len(requests)
+    i = 0
+    while i < n:
+        if requests[i] == b'PING':
+            response += b"+PONG\r\n"
+            i += 1
+        elif requests[i] == b"ECHO":
+            response += f"${len(requests[i + 1])}\r\n".encode() + requests[i + 1] + b"\r\n"
+            i += 2
+        elif requests[i] == b"SET":
+            key, value = bytes(requests[i + 1]), requests[i + 2]
+            cache[key] = value
+            response += b"+OK\r\n"
+            i += 3
+        elif requests[i] == b"GET":
+            key = bytes(requests[i + 1])
+            if key in cache:
+                value = cache[key]
+                response += f"${len(value)}\r\n".encode() + value + b"\r\n"
+            else:
+                response += b"$-1\r\n"
+            i += 2
+    return response
+    
 
 def handle_client(conn):
+    buf = bytearray()
+    requests = []
     while True:
         chunk: bytes = conn.recv(1024)
         if not chunk:
             return
-        requests = chunk.split(b"\r\n")
-        previous = b""
-        for request in requests:
-            if request.startswith((b"*", b"$")): continue
-            if request == b'PING':
-                conn.sendall(b"+PONG\r\n")
-            elif previous == b"ECHO":
-                conn.sendall(f"${len(request)}\r\n".encode() + request + b"\r\n")
-            previous = request
+        buf += chunk
+        currrent_requests = [current_request for current_request in buf.split(b"\r\n") if not current_request.startswith((b"*", b"$"))]
+        buf = currrent_requests.pop()
+        requests += currrent_requests
+        n = len(requests)
+        i = 0
+        while i < n:
+            if requests[i] == b'PING':
+                i += 1
+            elif requests[i] in (b'ECHO', b'GET'):
+                if i + 1 < n:
+                    i += 2
+                else:
+                    break
+            elif requests[i] == b'SET':
+                if i + 2 < n:
+                    i += 3
+                else:
+                    break
+        response = build_response(requests[:i])
+        conn.sendall(response)
+        requests = requests[i:]
 
 
 def main():
