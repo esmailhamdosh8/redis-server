@@ -7,13 +7,11 @@ lists = {}
 
 
 def build_response(parts: list[bytearray], request_ms):
-    response = bytearray()
     command, *args = parts
-
     if command == b'PING':
-        response += b"+PONG\r\n"
+        response = b"+PONG\r\n"
     elif command == b"ECHO":
-        response += f"${len(args[0])}\r\n".encode() + args[0] + b"\r\n"
+        response = f"${len(args[0])}\r\n".encode() + args[0] + b"\r\n"
     elif command == b"SET":
         key, value = bytes(args[0]), args[1]
         if len(args) > 2:
@@ -21,25 +19,38 @@ def build_response(parts: list[bytearray], request_ms):
             cache[key] = (value, request_ms, duration_ms)
         else:
             cache[key] = (value, -1, -1)
-        response += b"+OK\r\n"
+        response = b"+OK\r\n"
     elif command == b"GET":
         key = bytes(args[0])
         if key not in cache:
-            response += b"$-1\r\n"
+            response = b"$-1\r\n"
         else:
             value, saved_ms, duration_ms = cache[key]
             if saved_ms == -1 or duration_ms == -1 or request_ms - saved_ms <= duration_ms:
-                response += f"${len(value)}\r\n".encode() + value + b"\r\n"
+                response = f"${len(value)}\r\n".encode() + value + b"\r\n"
             else:
                 del cache[key]
-                response += b"$-1\r\n"
+                response = b"$-1\r\n"
     elif command == b"RPUSH":
         key = bytes(args[0])
         if key not in lists:
             lists[key] = []
         for value in args[1:]:
             lists[key].append(value)
-        response += f":{len(lists[key])}\r\n".encode()
+        response = f":{len(lists[key])}\r\n".encode()
+    elif command == b"LRANGE":
+        key = bytes(args[0])
+        if key not in lists:
+            lists[key] = []
+        start, stop = int(args[1]), int(args[2])
+        stop = min(stop, len(lists[key]) - 1)
+        if start > stop:
+            response = b"*0\r\n"
+        else:
+            response = f"*{stop - start + 1}\r\n".encode()
+            for i in range(start, stop + 1):
+                val = lists[key][i]
+                response += f"${len(val)}\r\n".encode() + val + b"\r\n"
     return response
     
 
