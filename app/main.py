@@ -1,10 +1,11 @@
 import socket  # noqa: F401
 import threading
+import time
 
 cache = {}
 
 
-def build_response(requests: list[bytearray]):
+def build_response(requests: list[bytearray], request_ms):
     response = bytearray()
     n = len(requests)
     i = 0
@@ -17,49 +18,73 @@ def build_response(requests: list[bytearray]):
             i += 2
         elif requests[i] == b"SET":
             key, value = bytes(requests[i + 1]), requests[i + 2]
-            cache[key] = value
+            if i + 3 < n and requests[i + 3] in (b"PX", b"EX"):
+                duration_ms = int(requests[i + 4]) if requests[i + 3] == b"PX" else 1000 * requests[i + 4]
+                cache[key] = (value, request_ms, duration_ms)
+                i += 5
+            else:
+                cache[key] = (value, -1, -1)
+                i += 3
             response += b"+OK\r\n"
-            i += 3
         elif requests[i] == b"GET":
             key = bytes(requests[i + 1])
-            if key in cache:
-                value = cache[key]
-                response += f"${len(value)}\r\n".encode() + value + b"\r\n"
-            else:
+            if key not in cache:
                 response += b"$-1\r\n"
+            else:
+                value, saved_ms, duration_ms = cache[key]
+                if saved_ms == -1 or duration_ms == -1 or request_ms - saved_ms <= duration_ms:
+                    response += f"${len(value)}\r\n".encode() + value + b"\r\n"
+                else:
+                    response += b"$-1\r\n"
             i += 2
     return response
     
 
 def handle_client(conn):
+    request_ms = int(time.time() * 1000)
     buf = bytearray()
-    requests = []
-    while True:
-        chunk: bytes = conn.recv(1024)
-        if not chunk:
-            return
-        buf += chunk
-        currrent_requests = [current_request for current_request in buf.split(b"\r\n") if not current_request.startswith((b"*", b"$"))]
-        buf = currrent_requests.pop()
-        requests += currrent_requests
-        n = len(requests)
-        i = 0
-        while i < n:
-            if requests[i] == b'PING':
-                i += 1
-            elif requests[i] in (b'ECHO', b'GET'):
-                if i + 1 < n:
-                    i += 2
+    current_request = []
+    try:
+        while True:
+            chunk = conn.recv(1024)
+            if not chunk: 
+                if not current_request: return
+                raise ValueError
+            buf += chunk
+            parts = buf.split(b"\r\n")
+            n = len(parts)
+            for i in range(n - 1):
+                if parts[i].startswith(b"*"):
+                    if current_request:
+                        response = build_response(current_request, request_ms)
+                        conn.sendall(response)
+                    request_ms = int(time.time() * 1000)
+                    current_request = []
+                    cnt_of_args = int(parts[i][1:])
+                elif parts[i].startswith(b"$"):
+                    len_of_arg = int(parts[i][1:])
                 else:
-                    break
-            elif requests[i] == b'SET':
-                if i + 2 < n:
-                    i += 3
-                else:
-                    break
-        response = build_response(requests[:i])
-        conn.sendall(response)
-        requests = requests[i:]
+                    if len(parts[i]) != len_of_arg: raise ValueError
+                    current_request.append(parts[i])
+            if not parts[-1] and len(current_request) == cnt_of_args:
+                if current_request:
+                    response = build_response(current_request, request_ms)
+                    conn.sendall(response)
+                current_request = []
+                buf = b""
+            elif parts[-1].startswith(b"*"):
+                if current_request:
+                    response = build_response(current_request, request_ms)
+                    conn.sendall(response)
+                request_ms = int(time.time() * 1000)
+                current_request = []
+                buf = parts[-1]
+            else:
+                buf = parts[-1]
+    except:
+        pass
+    finally:
+        conn.close()
 
 
 def main():
