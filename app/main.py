@@ -3,6 +3,7 @@ import threading
 import time
 
 cache = {}
+lists = {}
 
 
 def build_response(requests: list[bytearray], request_ms):
@@ -35,8 +36,17 @@ def build_response(requests: list[bytearray], request_ms):
                 if saved_ms == -1 or duration_ms == -1 or request_ms - saved_ms <= duration_ms:
                     response += f"${len(value)}\r\n".encode() + value + b"\r\n"
                 else:
+                    del cache[key]
                     response += b"$-1\r\n"
             i += 2
+        elif requests[i] == b"RPUSH":
+            key = bytes(requests[i + 1])
+            value = requests[i + 2]
+            if key not in lists:
+                lists[key] = []
+            lists[key].append(value)
+            response += f":{len(lists[key])}\r\n".encode()
+            i += 3
     return response
     
 
