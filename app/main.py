@@ -6,47 +6,40 @@ cache = {}
 lists = {}
 
 
-def build_response(requests: list[bytearray], request_ms):
+def build_response(parts: list[bytearray], request_ms):
     response = bytearray()
-    n = len(requests)
-    i = 0
-    while i < n:
-        if requests[i] == b'PING':
-            response += b"+PONG\r\n"
-            i += 1
-        elif requests[i] == b"ECHO":
-            response += f"${len(requests[i + 1])}\r\n".encode() + requests[i + 1] + b"\r\n"
-            i += 2
-        elif requests[i] == b"SET":
-            key, value = bytes(requests[i + 1]), requests[i + 2]
-            if i + 3 < n and requests[i + 3] in (b"PX", b"EX"):
-                duration_ms = int(requests[i + 4]) if requests[i + 3] == b"PX" else 1000 * requests[i + 4]
-                cache[key] = (value, request_ms, duration_ms)
-                i += 5
+    command, *args = parts
+
+    if command == b'PING':
+        response += b"+PONG\r\n"
+    elif command == b"ECHO":
+        response += f"${len(args[0])}\r\n".encode() + args[0] + b"\r\n"
+    elif command == b"SET":
+        key, value = bytes(args[0]), args[1]
+        if len(args) > 2:
+            duration_ms = int(args[3]) if args[2] == b"PX" else 1000 * args[3]
+            cache[key] = (value, request_ms, duration_ms)
+        else:
+            cache[key] = (value, -1, -1)
+        response += b"+OK\r\n"
+    elif command == b"GET":
+        key = bytes(args[0])
+        if key not in cache:
+            response += b"$-1\r\n"
+        else:
+            value, saved_ms, duration_ms = cache[key]
+            if saved_ms == -1 or duration_ms == -1 or request_ms - saved_ms <= duration_ms:
+                response += f"${len(value)}\r\n".encode() + value + b"\r\n"
             else:
-                cache[key] = (value, -1, -1)
-                i += 3
-            response += b"+OK\r\n"
-        elif requests[i] == b"GET":
-            key = bytes(requests[i + 1])
-            if key not in cache:
+                del cache[key]
                 response += b"$-1\r\n"
-            else:
-                value, saved_ms, duration_ms = cache[key]
-                if saved_ms == -1 or duration_ms == -1 or request_ms - saved_ms <= duration_ms:
-                    response += f"${len(value)}\r\n".encode() + value + b"\r\n"
-                else:
-                    del cache[key]
-                    response += b"$-1\r\n"
-            i += 2
-        elif requests[i] == b"RPUSH":
-            key = bytes(requests[i + 1])
-            value = requests[i + 2]
-            if key not in lists:
-                lists[key] = []
+    elif command == b"RPUSH":
+        key = bytes(args[0])
+        if key not in lists:
+            lists[key] = []
+        for value in args[1:]:
             lists[key].append(value)
-            response += f":{len(lists[key])}\r\n".encode()
-            i += 3
+        response += f":{len(lists[key])}\r\n".encode()
     return response
     
 
