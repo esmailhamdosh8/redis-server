@@ -1,6 +1,7 @@
 import socket  # noqa: F401
 import threading
 import time
+from collections import deque
 
 cache = {}
 lists = {}
@@ -34,21 +35,21 @@ def build_response(parts: list[bytearray], request_ms):
     elif command == b"RPUSH":
         key = bytes(args[0])
         if key not in lists:
-            lists[key] = []
+            lists[key] = deque()
         for value in args[1:]:
             lists[key].append(value)
         response = f":{len(lists[key])}\r\n".encode()
     elif command == b"LPUSH":
         key = bytes(args[0])
         if key not in lists:
-            lists[key] = []
+            lists[key] = deque()
         for value in args[1:]:
-            lists[key].insert(0, value)
+            lists[key].appendleft(value)
         response = f":{len(lists[key])}\r\n".encode()
     elif command == b"LRANGE":
         key = bytes(args[0])
         if key not in lists:
-            lists[key] = []
+            lists[key] = deque()
             response = b"*0\r\n"
         else:
             n = len(lists[key])
@@ -62,9 +63,12 @@ def build_response(parts: list[bytearray], request_ms):
                 response = b"*0\r\n"
             else:
                 response = f"*{stop - start + 1}\r\n".encode()
-                for i in range(start, stop + 1):
-                    val = lists[key][i]
+                i = 0
+                for val in lists[key]:
+                    if i < start: i += 1; continue
+                    if i > stop: break
                     response += f"${len(val)}\r\n".encode() + val + b"\r\n"
+                    i += 1
     return response
     
 
