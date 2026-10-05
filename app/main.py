@@ -75,6 +75,13 @@ def build_response(parts: list[bytearray], request_ms):
             response = b":0\r\n"
         else:
             response = f":{len(lists[key])}\r\n".encode()
+    elif command == b"LPOP":
+        key = bytes(args[0])
+        if key not in lists or not lists[key]:
+            response = b"$-1\r\n"
+        else:
+            pop_value = lists[key].popleft()
+            response = f"${len(pop_value)}\r\n".encode() + pop_value + b"\r\n"
     return response
     
 
