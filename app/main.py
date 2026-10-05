@@ -69,6 +69,12 @@ def build_response(parts: list[bytearray], request_ms):
                     if i > stop: break
                     response += f"${len(val)}\r\n".encode() + val + b"\r\n"
                     i += 1
+    elif command == b"LLEN":
+        key = bytes(args[0])
+        if key not in lists: 
+            response = b":0\r\n"
+        else:
+            response = f":{len(lists[key])}\r\n".encode()
     return response
     
 
