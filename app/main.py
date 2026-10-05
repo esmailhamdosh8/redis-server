@@ -38,6 +38,13 @@ def build_response(parts: list[bytearray], request_ms):
         for value in args[1:]:
             lists[key].append(value)
         response = f":{len(lists[key])}\r\n".encode()
+    elif command == b"LPUSH":
+        key = bytes(args[0])
+        if key not in lists:
+            lists[key] = []
+        for value in args[1:]:
+            lists[key].insert(0, value)
+        response = f":{len(lists[key])}\r\n".encode()
     elif command == b"LRANGE":
         key = bytes(args[0])
         if key not in lists:
