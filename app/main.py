@@ -80,8 +80,11 @@ def build_response(parts: list[bytearray], request_ms):
         if key not in lists or not lists[key]:
             response = b"$-1\r\n"
         else:
-            pop_value = lists[key].popleft()
-            response = f"${len(pop_value)}\r\n".encode() + pop_value + b"\r\n"
+            num_to_remove = 1 if len(args) == 1 else min(int(args[1]), len(lists[key]))
+            response = f"*{num_to_remove}\r\n".encode() if num_to_remove > 1 else b""
+            for _ in range(num_to_remove):
+                pop_value = lists[key].popleft()
+                response += f"${len(pop_value)}\r\n".encode() + pop_value + b"\r\n"
     return response
     
 
