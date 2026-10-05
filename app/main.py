@@ -42,15 +42,22 @@ def build_response(parts: list[bytearray], request_ms):
         key = bytes(args[0])
         if key not in lists:
             lists[key] = []
-        start, stop = int(args[1]), int(args[2])
-        stop = min(stop, len(lists[key]) - 1)
-        if start > stop:
             response = b"*0\r\n"
         else:
-            response = f"*{stop - start + 1}\r\n".encode()
-            for i in range(start, stop + 1):
-                val = lists[key][i]
-                response += f"${len(val)}\r\n".encode() + val + b"\r\n"
+            n = len(lists[key])
+            def helper(x):
+                if x >= n: return n - 1
+                if x >= 0: return x
+                if -x > n: return 0
+                return x + n
+            start, stop = helper(int(args[1])), helper(int(args[2]))
+            if start > stop:
+                response = b"*0\r\n"
+            else:
+                response = f"*{stop - start + 1}\r\n".encode()
+                for i in range(start, stop + 1):
+                    val = lists[key][i]
+                    response += f"${len(val)}\r\n".encode() + val + b"\r\n"
     return response
     
 
