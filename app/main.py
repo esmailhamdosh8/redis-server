@@ -5,6 +5,7 @@ from collections import deque
 
 cache = {}
 lists = {}
+streams = {}
 
 
 def build_response(parts: list[bytearray], request_ms):
@@ -103,10 +104,27 @@ def build_response(parts: list[bytearray], request_ms):
             time.sleep(0.01)
     elif command == b"TYPE":
         key = bytes(args[0])
-        if key not in cache:
-            response = b"+none\r\n"
-        else:
+        if key in cache:
             response = b"+string\r\n"
+        elif key in streams:
+            response = b"+stream\r\n"
+        else:
+            response = b"+none\r\n"
+    
+    elif command == b"XADD":
+        stream_key, entry_id, *parts = args
+        stream_key, entry_id = bytes(stream_key), bytes(entry_id)
+        if stream_key not in streams:
+            streams[stream_key] = {}
+        stream = streams[stream_key]
+        stream[entry_id] = {}
+        entry = stream[entry_id]
+        n = len(parts)
+        for i in range(0, n, 2):
+            key_entry = bytes(parts[i])
+            val_entry = parts[i + 1]
+            entry[key_entry] = val_entry
+        response = f"${len(entry_id)}\r\n".encode() + entry_id + b"\r\n"
     return response
     
 
