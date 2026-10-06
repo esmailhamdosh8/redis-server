@@ -85,6 +85,22 @@ def build_response(parts: list[bytearray], request_ms):
             for _ in range(num_to_remove):
                 pop_value = lists[key].popleft()
                 response += f"${len(pop_value)}\r\n".encode() + pop_value + b"\r\n"
+    elif command == b"BLPOP":
+        key = bytes(args[0])
+        timeout = float(args[1])
+        deadline = None if timeout == 0 else time.monotonic() + timeout
+        if key not in lists:
+            lists[key] = deque()
+        while True:
+            if lists[key]:
+                pop_value = lists[key].popleft()
+                response = f"*2\r\n${len(key)}\r\n".encode() + key +\
+                        f"\r\n${len(pop_value)}\r\n".encode() + pop_value + b"\r\n"
+                break
+            if deadline is not None and time.monotonic() > deadline:
+                response = b"*-1\r\n"
+                break
+            time.sleep(0.01)
     return response
     
 
@@ -141,8 +157,8 @@ def main():
 
     # Uncomment the code below to pass the first stage
     #
+    server_socket = socket.create_server(('localhost', 6379), reuse_port=True)
     while True:
-        server_socket = socket.create_server(('localhost', 6379), reuse_port=True)
         conn, addr = server_socket.accept()
         threading.Thread(target=handle_client, args=(conn,), daemon=True).start()
 
