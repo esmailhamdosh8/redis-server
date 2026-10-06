@@ -112,19 +112,36 @@ def build_response(parts: list[bytearray], request_ms):
             response = b"+none\r\n"
     
     elif command == b"XADD":
+        response = None
         stream_key, entry_id, *parts = args
         stream_key, entry_id = bytes(stream_key), bytes(entry_id)
         if stream_key not in streams:
-            streams[stream_key] = {}
+            streams[stream_key] = []
         stream = streams[stream_key]
-        stream[entry_id] = {}
-        entry = stream[entry_id]
-        n = len(parts)
-        for i in range(0, n, 2):
-            key_entry = bytes(parts[i])
-            val_entry = parts[i + 1]
-            entry[key_entry] = val_entry
-        response = f"${len(entry_id)}\r\n".encode() + entry_id + b"\r\n"
+        milliseconds, _, seq = entry_id.partition(b"-")
+        milliseconds, seq = int(milliseconds), int(seq)
+        if milliseconds == 0 and seq == 0:
+            response = b"-ERR The ID specified in XADD must be greater than 0-0\r\n"
+        elif not stream:
+            stream.append([entry_id, {}])
+        else:
+            last_entry_id, _ = stream[-1]
+            last_milli, _, last_seq = last_entry_id.partition(b"-")
+            last_milli, last_seq = int(last_milli), int(last_seq)
+            if milliseconds > last_milli:
+                stream.append([entry_id, {}])
+            elif milliseconds == last_milli and seq > last_seq:
+                stream.append([entry_id, {}])
+            else:
+                response = b"-ERR The ID specified in XADD is equal or smaller than the target stream top item\r\n"
+        if response is None:
+            entry = stream[-1][1]
+            n = len(parts)
+            for i in range(0, n, 2):
+                key_entry = bytes(parts[i])
+                val_entry = parts[i + 1]
+                entry[key_entry] = val_entry
+            response = f"${len(entry_id)}\r\n".encode() + entry_id + b"\r\n"
     return response
     
 
