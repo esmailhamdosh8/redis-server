@@ -101,6 +101,12 @@ def build_response(parts: list[bytearray], request_ms):
                 response = b"*-1\r\n"
                 break
             time.sleep(0.01)
+    elif command == b"TYPE":
+        key = bytes(args[0])
+        if key not in cache:
+            response = b"+none\r\n"
+        else:
+            response = b"+string\r\n"
     return response
     
 
