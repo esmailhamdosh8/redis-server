@@ -126,8 +126,7 @@ def generate_entry_id(entry_id, stream):
         if not stream:
             seq = 0
         else:
-            last_milliseconds, _, last_seq = stream[-1][0].partition(b"-")
-            last_milliseconds, last_seq = int(last_milliseconds), int(last_seq)
+            last_milliseconds, last_seq = stream[-1][:2]
             if milliseconds > last_milliseconds:
                 seq = 0
             else:
@@ -136,21 +135,29 @@ def generate_entry_id(entry_id, stream):
     else:
         milliseconds, _, seq = entry_id.partition(b"-")
         milliseconds = int(milliseconds)
+        if stream and milliseconds < stream[-1][0]:
+            if milliseconds == 0 and seq == b"0":
+                raise ValueError(b"-ERR The ID specified in XADD must be greater than 0-0\r\n")
+            raise ValueError(b"-ERR The ID specified in XADD is equal or smaller than the target stream top item\r\n")
         if seq != b"*":
             seq = int(seq)
+            if stream and milliseconds == stream[-1][0] and seq <= stream[-1][1]:
+                if milliseconds == 0 and seq == 0:
+                    raise ValueError(b"-ERR The ID specified in XADD must be greater than 0-0\r\n")
+                raise ValueError(b"-ERR The ID specified in XADD is equal or smaller than the target stream top item\r\n")
         elif not stream:
             if milliseconds == 0:
                 seq = 1
             else:
                 seq = 0
         else:
-            last_milliseconds, _, last_seq = stream[-1][0].partition(b"-")
-            last_milliseconds, last_seq = int(last_milliseconds), int(last_seq)
+            last_milliseconds, last_seq = stream[-1][:2]
             if milliseconds > last_milliseconds:
                 seq = 0
             else:
                 seq = last_seq + 1
-    return f"{milliseconds}-{seq}".encode()     
+    if milliseconds == 0 and seq == 0: raise ValueError(b"-ERR The ID specified in XADD must be greater than 0-0\r\n")
+    return milliseconds, seq
 
 
 def XADD(args, request_ms):
@@ -160,30 +167,17 @@ def XADD(args, request_ms):
     if stream_key not in state.streams:
         state.streams[stream_key] = []
     stream = state.streams[stream_key]
-    entry_id = generate_entry_id(entry_id, stream)
-    milliseconds, _, seq = entry_id.partition(b"-")
-    milliseconds, seq = int(milliseconds), int(seq)
-    if milliseconds == 0 and seq == 0:
-        response = b"-ERR The ID specified in XADD must be greater than 0-0\r\n"
-    elif not stream:
-        stream.append([entry_id, {}])
-    else:
-        last_entry_id, _ = stream[-1]
-        last_milli, _, last_seq = last_entry_id.partition(b"-")
-        last_milli, last_seq = int(last_milli), int(last_seq)
-        if milliseconds > last_milli:
-            stream.append([entry_id, {}])
-        elif milliseconds == last_milli and seq > last_seq:
-            stream.append([entry_id, {}])
-        else:
-            response = b"-ERR The ID specified in XADD is equal or smaller than the target stream top item\r\n"
-    if response is None:
-        entry = stream[-1][1]
+    try:
+        milliseconds, seq = generate_entry_id(entry_id, stream)
+        stream.append([milliseconds, seq, {}])
+        entry = stream[-1][2]
         n = len(parts)
         for i in range(0, n, 2):
             key_entry = bytes(parts[i])
             val_entry = parts[i + 1]
             entry[key_entry] = val_entry
-        response = f"${len(entry_id)}\r\n".encode() + entry_id + b"\r\n"
+        processed_entry_id = f"{milliseconds}-{seq}"
+        response = f"${len(processed_entry_id)}\r\n{processed_entry_id}\r\n".encode()
+    except ValueError as e:
+        response = e.args[0]
     return response
-
