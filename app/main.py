@@ -11,9 +11,10 @@ def build_response(parts: list[bytearray], request_ms):
     
 
 def handle_client(conn):
-    request_ms = int(time.time() * 1000)
     buf = bytearray()
     current_request = []
+    request_ms = None
+    cnt_of_args = 0
     try:
         while True:
             chunk = conn.recv(1024)
@@ -24,29 +25,31 @@ def handle_client(conn):
             parts = buf.split(b"\r\n")
             n = len(parts)
             for i in range(n - 1):
-                if parts[i].startswith(b"*"):
+                if cnt_of_args == 0:
+                    if not parts[i].startswith(b"*"): raise ValueError
                     if current_request:
                         response = build_response(current_request, request_ms)
                         conn.sendall(response)
-                    request_ms = int(time.time() * 1000)
                     current_request = []
                     cnt_of_args = int(parts[i][1:])
-                elif parts[i].startswith(b"$"):
-                    len_of_arg = int(parts[i][1:])
+                    request_ms = int(time.time() * 1000)
                 else:
-                    if len(parts[i]) != len_of_arg: raise ValueError
-                    current_request.append(parts[i])
-            if not parts[-1] and len(current_request) == cnt_of_args:
+                    if parts[i].startswith(b"$"):
+                        len_of_arg = int(parts[i][1:])
+                    else:
+                        if len(parts[i]) != len_of_arg: raise ValueError
+                        current_request.append(parts[i])
+                        cnt_of_args -= 1
+            if not parts[-1] and cnt_of_args == 0:
                 if current_request:
                     response = build_response(current_request, request_ms)
                     conn.sendall(response)
                 current_request = []
                 buf = b""
-            elif parts[-1].startswith(b"*"):
+            elif parts[-1].startswith(b"*") and cnt_of_args == 0:
                 if current_request:
                     response = build_response(current_request, request_ms)
                     conn.sendall(response)
-                request_ms = int(time.time() * 1000)
                 current_request = []
                 buf = parts[-1]
             else:

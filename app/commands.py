@@ -121,22 +121,35 @@ def TYPE(args, request_ms):
 
 # XADD helper
 def generate_entry_id(entry_id, stream):
-    milliseconds, _, seq = entry_id.partition(b"-")
-    milliseconds = int(milliseconds)
-    if seq != b"*":
-        seq = int(seq)
-    elif not stream:
-        if milliseconds == 0:
-            seq = 1
-        else:
+    if entry_id == b"*":
+        milliseconds = int(time.time() * 1000)
+        if not stream:
             seq = 0
+        else:
+            last_milliseconds, _, last_seq = stream[-1][0].partition(b"-")
+            last_milliseconds, last_seq = int(last_milliseconds), int(last_seq)
+            if milliseconds > last_milliseconds:
+                seq = 0
+            else:
+                milliseconds = max(milliseconds, last_milliseconds)
+                seq = last_seq + 1
     else:
-        last_milliseconds, _, last_seq = stream[-1][0].partition(b"-")
-        last_milliseconds, last_seq = int(last_milliseconds), int(last_seq)
-        if milliseconds > last_milliseconds:
-            seq = 0
+        milliseconds, _, seq = entry_id.partition(b"-")
+        milliseconds = int(milliseconds)
+        if seq != b"*":
+            seq = int(seq)
+        elif not stream:
+            if milliseconds == 0:
+                seq = 1
+            else:
+                seq = 0
         else:
-            seq = last_seq + 1
+            last_milliseconds, _, last_seq = stream[-1][0].partition(b"-")
+            last_milliseconds, last_seq = int(last_milliseconds), int(last_seq)
+            if milliseconds > last_milliseconds:
+                seq = 0
+            else:
+                seq = last_seq + 1
     return f"{milliseconds}-{seq}".encode()     
 
 
