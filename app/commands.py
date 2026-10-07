@@ -185,12 +185,13 @@ def XADD(args, request_ms):
 def XRANGE(args, request_ms):
     stream_key, entry_id_1, entry_id_2 = args[:3]
     stream_key, entry_id_1, entry_id_2 = bytes(stream_key), bytes(entry_id_1), bytes(entry_id_2)
-    print(entry_id_1)
-    if b"-" in entry_id_1:
+    if entry_id_1 == b"-":
+        milli_1 = 0
+        seq_1 = 0
+    elif b"-" in entry_id_1:
         milli_1, _, seq_1 = entry_id_1.partition(b"-")
         milli_1, seq_1 = int(milli_1), int(seq_1)
         print(milli_1, seq_1)
-
     else:
         milli_1 = int(entry_id_1)
         seq_1 = 0
