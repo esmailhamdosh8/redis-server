@@ -195,8 +195,10 @@ def XRANGE(args, request_ms):
     else:
         milli_1 = int(entry_id_1)
         seq_1 = 0
-    
-    if b"-" in entry_id_2:
+
+    if entry_id_2 == b"+":
+        milli_2, seq_2 = math.inf, math.inf
+    elif b"-" in entry_id_2:
         milli_2, _, seq_2 = entry_id_2.partition(b"-")
         milli_2, seq_2 = int(milli_2), int(seq_2)
     else:
