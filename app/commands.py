@@ -1,6 +1,7 @@
 from .glb import state
 from collections import deque
 import time
+import math
 
 def PING(args, request_ms):
     return b"+PONG\r\n"
@@ -159,7 +160,6 @@ def generate_entry_id(entry_id, stream):
     if milliseconds == 0 and seq == 0: raise ValueError(b"-ERR The ID specified in XADD must be greater than 0-0\r\n")
     return milliseconds, seq
 
-
 def XADD(args, request_ms):
     response = None
     stream_key, entry_id, *parts = args
@@ -180,4 +180,55 @@ def XADD(args, request_ms):
         response = f"${len(processed_entry_id)}\r\n{processed_entry_id}\r\n".encode()
     except ValueError as e:
         response = e.args[0]
+    return response
+
+def XRANGE(args, request_ms):
+    stream_key, entry_id_1, entry_id_2 = args[:3]
+    stream_key, entry_id_1, entry_id_2 = bytes(stream_key), bytes(entry_id_1), bytes(entry_id_2)
+    print(entry_id_1)
+    if b"-" in entry_id_1:
+        milli_1, _, seq_1 = entry_id_1.partition(b"-")
+        milli_1, seq_1 = int(milli_1), int(seq_1)
+        print(milli_1, seq_1)
+
+    else:
+        milli_1 = int(entry_id_1)
+        seq_1 = 0
+    
+    if b"-" in entry_id_2:
+        milli_2, _, seq_2 = entry_id_2.partition(b"-")
+        milli_2, seq_2 = int(milli_2), int(seq_2)
+    else:
+        milli_2 = int(entry_id_2)
+        seq_2 = math.inf
+    stream = state.streams[stream_key]
+    start_index, end_index = None, None
+    start, end = 0, len(stream) - 1
+    while start < end:
+        mid = (start + end) // 2
+        if stream[mid][0] < milli_1:
+            start = mid + 1
+        elif stream[mid][0] == milli_1 and stream[mid][1] < seq_1:
+            start = mid + 1
+        else:
+            end = mid
+    start_index = start
+    start, end = 0, len(stream) - 1
+    while start < end:
+        mid = (start + end + 1) // 2
+        if stream[mid][0] > milli_2:
+            end = mid - 1
+        elif stream[mid][0] == milli_2 and stream[mid][1] > seq_2:
+            end = mid - 1
+        else:
+            start = mid
+    
+    end_index = end
+    response = f"*{end_index - start_index + 1}\r\n".encode()
+    for i in range(start_index, end_index + 1):
+        entry_id = f"{stream[i][0]}-{stream[i][1]}"
+        entry = stream[i][2]
+        response += f"*2\r\n${len(entry_id)}\r\n{entry_id}\r\n*{len(entry) * 2}\r\n".encode()
+        for key, val in entry.items():
+            response += f"${len(key)}\r\n".encode() + key + f"\r\n${len(val)}\r\n".encode() + val + b"\r\n"
     return response

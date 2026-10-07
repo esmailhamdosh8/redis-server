@@ -1,5 +1,1 @@
-name = "haya esmail eso"
-
-print(name.split('\r\n'))
-
-print(b"PING".decode())
+print(int(b"2"))
