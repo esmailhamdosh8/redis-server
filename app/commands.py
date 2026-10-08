@@ -235,3 +235,30 @@ def XRANGE(args, request_ms):
         for key, val in entry.items():
             response += f"${len(key)}\r\n".encode() + key + f"\r\n${len(val)}\r\n".encode() + val + b"\r\n"
     return response
+
+def XREAD(args, request_ms):
+    stream_key, entry_id = args[1:3]
+    stream_key = bytes(stream_key)
+    milli, _, seq = entry_id.partition(b"-")
+    milli, seq = int(milli), int(seq)
+    stream = state.streams[stream_key]
+    n = len(stream)
+    start, end = 0, n - 1
+    while start < end:
+        mid = (start + end) // 2
+        if stream[mid][0] < milli:
+            start = mid + 1
+        elif stream[mid][0] == milli and stream[mid][1] <= seq:
+            start = mid + 1
+        else:
+            end = mid
+    start_index = start
+    print(stream, start_index)
+    response = f"*1\r\n*2\r\n${len(stream_key)}\r\n".encode() + stream_key + f"\r\n*{n - start_index}\r\n".encode()
+    for i in range(start_index, n):
+        entry_id = f"{stream[i][0]}-{stream[i][1]}"
+        entry = stream[i][2]
+        response += f"*2\r\n${len(entry_id)}\r\n{entry_id}\r\n*{2 * len(entry)}\r\n".encode()
+        for key, val in entry.items():
+            response += f"${len(key)}\r\n".encode() + key + f"\r\n${len(val)}\r\n".encode() + val + b"\r\n"
+    return response
