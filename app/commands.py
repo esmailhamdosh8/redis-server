@@ -247,7 +247,7 @@ def XREAD(args, request_ms):
         milli, _, seq = entry_id.partition(b"-")
         milli, seq = int(milli), int(seq)
         stream = state.streams[stream_key]
-        deadline = time.monotonic() * 1000 + block_ms
+        deadline = time.monotonic() * 1000 + block_ms if block_ms != 0 else math.inf
         while True:
             n = len(stream)
             if n == 0:
