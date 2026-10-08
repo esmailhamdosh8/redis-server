@@ -244,9 +244,17 @@ def XREAD(args, request_ms):
     for i in range(m):
         stream_key = bytes(args[start_of_keys + i])
         entry_id = bytes(args[start_of_keys + i + m])
-        milli, _, seq = entry_id.partition(b"-")
-        milli, seq = int(milli), int(seq)
+        if stream_key not in state.streams:
+            state.streams[stream_key] = []
         stream = state.streams[stream_key]
+        if entry_id == b"$":
+            if stream:
+                milli, seq = stream[-1][0], stream[-1][1]
+            else:
+                milli, seq = 0, 0
+        else:
+            milli, _, seq = entry_id.partition(b"-")
+            milli, seq = int(milli), int(seq)
         deadline = time.monotonic() * 1000 + block_ms if block_ms != 0 else math.inf
         while True:
             n = len(stream)

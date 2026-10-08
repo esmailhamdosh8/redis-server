@@ -24,6 +24,7 @@ def handle_client(conn):
             buf += chunk
             parts = buf.split(b"\r\n")
             n = len(parts)
+            find_len = True
             for i in range(n - 1):
                 if cnt_of_args == 0:
                     if not parts[i].startswith(b"*"): raise ValueError
@@ -34,12 +35,14 @@ def handle_client(conn):
                     cnt_of_args = int(parts[i][1:])
                     request_ms = int(time.time() * 1000)
                 else:
-                    if parts[i].startswith(b"$"):
+                    if find_len:
+                        if not parts[i].startswith(b"$"): raise ValueError
                         len_of_arg = int(parts[i][1:])
                     else:
                         if len(parts[i]) != len_of_arg: raise ValueError
                         current_request.append(parts[i])
                         cnt_of_args -= 1
+                    find_len = not find_len
             if not parts[-1] and cnt_of_args == 0:
                 if current_request:
                     response = build_response(current_request, request_ms)
