@@ -237,30 +237,43 @@ def XRANGE(args, request_ms):
     return response
 
 def XREAD(args, request_ms):
-    m = len(args)
-    response = f"*{m // 2}\r\n".encode()
-    for i in range(1, m // 2 + 1):
-        stream_key = bytes(args[i])
-        entry_id = bytes(args[i + m // 2])
+    block_ms = -1 if args[0] == b"streams" else int(args[1])
+    start_of_keys = 1 if args[0] == b"streams" else 3
+    m = (len(args) - start_of_keys) // 2    
+    response = f"*{m}\r\n".encode()
+    for i in range(m):
+        stream_key = bytes(args[start_of_keys + i])
+        entry_id = bytes(args[start_of_keys + i + m])
         milli, _, seq = entry_id.partition(b"-")
         milli, seq = int(milli), int(seq)
         stream = state.streams[stream_key]
-        n = len(stream)
-        start, end = 0, n - 1
-        while start < end:
-            mid = (start + end) // 2
-            if stream[mid][0] < milli:
-                start = mid + 1
-            elif stream[mid][0] == milli and stream[mid][1] <= seq:
-                start = mid + 1
+        deadline = time.monotonic() * 1000 + block_ms
+        while True:
+            n = len(stream)
+            if n == 0:
+                start_index = 0
             else:
-                end = mid
-        start_index = start
-        response += f"*2\r\n${len(stream_key)}\r\n".encode() + stream_key + f"\r\n*{n - start_index}\r\n".encode()
-        for i in range(start_index, n):
-            entry_id = f"{stream[i][0]}-{stream[i][1]}"
-            entry = stream[i][2]
-            response += f"*2\r\n${len(entry_id)}\r\n{entry_id}\r\n*{2 * len(entry)}\r\n".encode()
-            for key, val in entry.items():
-                response += f"${len(key)}\r\n".encode() + key + f"\r\n${len(val)}\r\n".encode() + val + b"\r\n"
+                start, end = 0, n - 1
+                while start < end:
+                    mid = (start + end) // 2
+                    if stream[mid][0] < milli:
+                        start = mid + 1
+                    elif stream[mid][0] == milli and stream[mid][1] <= seq:
+                        start = mid + 1
+                    else:
+                        end = mid
+                start_index = start if (stream[start][0] > milli or (stream[start][0] == milli and stream[start][1] > seq)) else n
+            if block_ms == -1 or start_index != n:
+                response += f"*2\r\n${len(stream_key)}\r\n".encode() + stream_key + f"\r\n*{n - start_index}\r\n".encode()
+                for i in range(start_index, n):
+                    entry_id = f"{stream[i][0]}-{stream[i][1]}"
+                    entry = stream[i][2]
+                    response += f"*2\r\n${len(entry_id)}\r\n{entry_id}\r\n*{2 * len(entry)}\r\n".encode()
+                    for key, val in entry.items():
+                        response += f"${len(key)}\r\n".encode() + key + f"\r\n${len(val)}\r\n".encode() + val + b"\r\n"
+                break
+            elif time.monotonic() * 1000 > deadline:
+                return b"*-1\r\n"
+            else:
+                time.sleep(0.01)
     return response
