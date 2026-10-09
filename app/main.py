@@ -7,7 +7,7 @@ from .commands import *
 
 def build_response(parts: list[bytearray], request_ms):
     command, *args = parts
-    if state.queue:
+    if state.queue and command != b'EXEC':
         state.command_queue.append((command, args))
         return b"+QUEUED\r\n"
     else:

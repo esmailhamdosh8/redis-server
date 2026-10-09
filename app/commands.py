@@ -304,3 +304,7 @@ def MULTI(args, request_ms):
 def EXEC(args, request_ms):
     if not state.queue:
         return b"-ERR EXEC without MULTI\r\n"
+    else:
+        state.queue = False
+        if not state.command_queue:
+            return b"*0\r\n"
