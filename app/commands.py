@@ -314,3 +314,12 @@ def EXEC(args, request_ms):
                 command_response = globals()[command.decode()](command_args, command_request_ms)
                 response += command_response
             return response
+
+
+def DISCARD(args, request_ms):
+    if not thread_state.queue:
+        return b"-ERR DISCARD without MULTI\r\n"
+    else:
+        thread_state.queue = False
+        thread_state.command_queue = []
+        return b"+OK\r\n"

@@ -8,7 +8,8 @@ from .commands import *
 
 def build_response(parts: list[bytearray], request_ms):
     command, *args = parts
-    if thread_state.queue and command != b'EXEC':
+    exceptions_commands_to_MULTI = (b'EXEC', b'DISCARD')
+    if thread_state.queue and command not in exceptions_commands_to_MULTI:
         thread_state.command_queue.append((command, args, request_ms))
         return b"+QUEUED\r\n"
     else:
