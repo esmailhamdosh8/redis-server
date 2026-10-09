@@ -13,9 +13,9 @@ def SET(args, request_ms):
     key, value = bytes(args[0]), args[1]
     if len(args) > 2:
         duration_ms = int(args[3]) if args[2] == b"PX" else 1000 * args[3]
-        state.cache[key] = (value, request_ms, duration_ms)
+        state.cache[key] = [value, request_ms, duration_ms]
     else:
-        state.cache[key] = (value, -1, -1)
+        state.cache[key] = [value, -1, -1]
     return b"+OK\r\n"
 
 def GET(args, request_ms):
@@ -285,3 +285,8 @@ def XREAD(args, request_ms):
             else:
                 time.sleep(0.01)
     return response
+
+def INCR(args, request_ms):
+    key = bytes(args[0])
+    state.cache[key][0] = str(int(state.cache[key][0]) + 1).encode()
+    return b":" + state.cache[key][0] + b"\r\n"
