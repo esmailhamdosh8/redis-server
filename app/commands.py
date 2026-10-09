@@ -296,3 +296,7 @@ def INCR(args, request_ms):
     else:
         state.cache[key] = [b"1", -1, -1]
     return b":" + state.cache[key][0] + b"\r\n"
+
+def MULTI(args, request_ms):
+    state.queue = True
+    return b"+OK\r\n"

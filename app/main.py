@@ -7,7 +7,11 @@ from .commands import *
 
 def build_response(parts: list[bytearray], request_ms):
     command, *args = parts
-    return globals()[command.decode()](args, request_ms)
+    if state.queue:
+        state.command_queue.append((command, args))
+        return b"+QUEUED\r\n"
+    else:
+        return globals()[command.decode()](args, request_ms)
     
 
 def handle_client(conn):
