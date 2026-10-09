@@ -289,7 +289,10 @@ def XREAD(args, request_ms):
 def INCR(args, request_ms):
     key = bytes(args[0])
     if key in state.cache:
-        state.cache[key][0] = str(int(state.cache[key][0]) + 1).encode()
+        try:
+            state.cache[key][0] = str(int(state.cache[key][0]) + 1).encode()
+        except:
+            return b"-ERR value is not an integer or out of range\r\n"
     else:
         state.cache[key] = [b"1", -1, -1]
     return b":" + state.cache[key][0] + b"\r\n"
