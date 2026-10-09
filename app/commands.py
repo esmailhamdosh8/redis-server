@@ -302,10 +302,15 @@ def MULTI(args, request_ms):
     return b"+OK\r\n"
 
 def EXEC(args, request_ms):
-    print(thread_state)
     if not thread_state.queue:
         return b"-ERR EXEC without MULTI\r\n"
     else:
         thread_state.queue = False
         if not thread_state.command_queue:
             return b"*0\r\n"
+        else:
+            response = f"*{len(thread_state.command_queue)}\r\n".encode()
+            for command, command_args, command_request_ms in thread_state.command_queue:
+                command_response = globals()[command.decode()](command_args, command_request_ms)
+                response += command_response
+            return response

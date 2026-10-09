@@ -9,7 +9,7 @@ from .commands import *
 def build_response(parts: list[bytearray], request_ms):
     command, *args = parts
     if thread_state.queue and command != b'EXEC':
-        thread_state.command_queue.append((command, args))
+        thread_state.command_queue.append((command, args, request_ms))
         return b"+QUEUED\r\n"
     else:
         return globals()[command.decode()](args, request_ms)
