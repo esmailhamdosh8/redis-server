@@ -288,5 +288,8 @@ def XREAD(args, request_ms):
 
 def INCR(args, request_ms):
     key = bytes(args[0])
-    state.cache[key][0] = str(int(state.cache[key][0]) + 1).encode()
+    if key in state.cache:
+        state.cache[key][0] = str(int(state.cache[key][0]) + 1).encode()
+    else:
+        state.cache[key] = [b"1", -1, -1]
     return b":" + state.cache[key][0] + b"\r\n"
