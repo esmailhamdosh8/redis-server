@@ -1,4 +1,4 @@
-from .glb import state
+from .glb import *
 from collections import deque
 import time
 import math
@@ -298,13 +298,14 @@ def INCR(args, request_ms):
     return b":" + state.cache[key][0] + b"\r\n"
 
 def MULTI(args, request_ms):
-    state.queue = True
+    thread_state.queue = True
     return b"+OK\r\n"
 
 def EXEC(args, request_ms):
-    if not state.queue:
+    print(thread_state)
+    if not thread_state.queue:
         return b"-ERR EXEC without MULTI\r\n"
     else:
-        state.queue = False
-        if not state.command_queue:
+        thread_state.queue = False
+        if not thread_state.command_queue:
             return b"*0\r\n"
