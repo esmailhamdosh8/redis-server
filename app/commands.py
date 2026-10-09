@@ -300,3 +300,7 @@ def INCR(args, request_ms):
 def MULTI(args, request_ms):
     state.queue = True
     return b"+OK\r\n"
+
+def EXEC(args, request_ms):
+    if not state.queue:
+        return b"-ERR EXEC without MULTI\r\n"
