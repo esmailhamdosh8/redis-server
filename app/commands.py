@@ -337,7 +337,8 @@ def WATCH(args, request_ms):
     if thread_state.queue:
         return b"-ERR WATCH inside MULTI is not allowed\r\n"
     else:
-        key = bytes(args[0])
-        thread_state.watched_keys[key] = state.cache[key] if key in state.cache else -1
-        return b"+OK\r\n"
+        for key in args:
+            key = bytes(key)
+            thread_state.watched_keys[key] = state.cache[key] if key in state.cache else -1
+            return b"+OK\r\n"
 
