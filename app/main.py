@@ -19,7 +19,7 @@ def build_response(parts: list[bytearray], request_ms):
 def handle_client(conn):
     thread_state.queue = False
     thread_state.command_queue = []
-    thread_state.watched_keys = set()
+    thread_state.watched_keys = {}
     buf = bytearray()
     current_request = []
     request_ms = None

@@ -306,6 +306,13 @@ def EXEC(args, request_ms):
         return b"-ERR EXEC without MULTI\r\n"
     else:
         thread_state.queue = False
+        for watched_key, val in thread_state.watched_keys.items():
+            if val != -1:
+                if watched_key not in state.cache or state.cache[watched_key] != val:
+                    return b"*-1\r\n"
+            elif watched_key in state.cache:
+                return b"*-1\r\n"
+
         if not thread_state.command_queue:
             return b"*0\r\n"
         else:
@@ -327,10 +334,10 @@ def DISCARD(args, request_ms):
         return b"+OK\r\n"
 
 def WATCH(args, request_ms):
-    print('hi', thread_state.queue)
     if thread_state.queue:
         return b"-ERR WATCH inside MULTI is not allowed\r\n"
     else:
         key = bytes(args[0])
-        thread_state.watched_keys.add(key)
+        thread_state.watched_keys[key] = state.cache[key] if key in state.cache else -1
         return b"+OK\r\n"
+
