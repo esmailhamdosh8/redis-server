@@ -327,4 +327,10 @@ def DISCARD(args, request_ms):
         return b"+OK\r\n"
 
 def WATCH(args, request_ms):
-    return b"+OK\r\n"
+    print('hi', thread_state.queue)
+    if thread_state.queue:
+        return b"-ERR WATCH inside MULTI is not allowed\r\n"
+    else:
+        key = bytes(args[0])
+        thread_state.watched_keys.add(key)
+        return b"+OK\r\n"

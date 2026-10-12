@@ -8,7 +8,7 @@ from .commands import *
 
 def build_response(parts: list[bytearray], request_ms):
     command, *args = parts
-    exceptions_commands_to_MULTI = (b'EXEC', b'DISCARD')
+    exceptions_commands_to_MULTI = (b'EXEC', b'DISCARD', b'WATCH')
     if thread_state.queue and command not in exceptions_commands_to_MULTI:
         thread_state.command_queue.append((command, args, request_ms))
         return b"+QUEUED\r\n"
@@ -19,6 +19,7 @@ def build_response(parts: list[bytearray], request_ms):
 def handle_client(conn):
     thread_state.queue = False
     thread_state.command_queue = []
+    thread_state.watched_keys = set()
     buf = bytearray()
     current_request = []
     request_ms = None
