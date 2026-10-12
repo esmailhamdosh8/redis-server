@@ -311,10 +311,12 @@ def EXEC(args, request_ms):
         else:
             response = f"*{len(thread_state.command_queue)}\r\n".encode()
             for command, command_args, command_request_ms in thread_state.command_queue:
-                command_response = globals()[command.decode()](command_args, command_request_ms)
-                response += command_response
+                try:
+                    command_response = globals()[command.decode()](command_args, command_request_ms)
+                    response += command_response
+                except Exception as e:
+                    response += b"-ERR " + str(e).encode() + b"\r\n"
             return response
-
 
 def DISCARD(args, request_ms):
     if not thread_state.queue:
@@ -323,3 +325,6 @@ def DISCARD(args, request_ms):
         thread_state.queue = False
         thread_state.command_queue = []
         return b"+OK\r\n"
+
+def WATCH(args, request_ms):
+    return b"+OK\r\n"

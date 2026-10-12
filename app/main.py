@@ -65,8 +65,6 @@ def handle_client(conn):
                 buf = parts[-1]
             else:
                 buf = parts[-1]
-    except:
-        pass
     finally:
         conn.close()
 
