@@ -313,17 +313,14 @@ def EXEC(args, request_ms):
             elif watched_key in state.cache:
                 return b"*-1\r\n"
 
-        if not thread_state.command_queue:
-            return b"*0\r\n"
-        else:
-            response = f"*{len(thread_state.command_queue)}\r\n".encode()
-            for command, command_args, command_request_ms in thread_state.command_queue:
-                try:
-                    command_response = globals()[command.decode()](command_args, command_request_ms)
-                    response += command_response
-                except Exception as e:
-                    response += b"-ERR " + str(e).encode() + b"\r\n"
-            return response
+        response = f"*{len(thread_state.command_queue)}\r\n".encode()
+        for command, command_args, command_request_ms in thread_state.command_queue:
+            try:
+                command_response = globals()[command.decode()](command_args, command_request_ms)
+                response += command_response
+            except Exception as e:
+                response += b"-ERR " + str(e).encode() + b"\r\n"
+        return response
 
 def DISCARD(args, request_ms):
     if not thread_state.queue:
@@ -341,4 +338,5 @@ def WATCH(args, request_ms):
             key = bytes(key)
             thread_state.watched_keys[key] = state.cache[key] if key in state.cache else -1
             return b"+OK\r\n"
+
 
