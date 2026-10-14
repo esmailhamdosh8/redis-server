@@ -1,5 +1,6 @@
 import socket  # noqa: F401
 import threading
+import sys
 import time
 from collections import deque
 from .glb import *
@@ -76,7 +77,17 @@ def main():
     
     # Uncomment the code below to pass the first stage
     #
-    server_socket = socket.create_server(('localhost', 6379), reuse_port=True)
+    args = sys.argv
+    n = len(args)
+    port = 6379
+    for i in range(n):
+        if args[i] == '--port' and i + 1 < n:
+            try:
+                port = int(args[i + 1])
+            except:
+                pass
+            break
+    server_socket = socket.create_server(('localhost', port), reuse_port=True)
     while True:
         conn, addr = server_socket.accept()
         threading.Thread(target=handle_client, args=(conn,), daemon=True).start()

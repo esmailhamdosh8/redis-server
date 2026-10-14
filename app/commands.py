@@ -305,7 +305,7 @@ def EXEC(args, request_ms):
     response = b"-ERR EXEC without MULTI\r\n"
     if thread_state.queue:
         for watched_key, val in thread_state.watched_keys.items():
-            if val != -1:
+            if val is not None:
                 if watched_key not in state.cache or state.cache[watched_key] != val:
                     response = b"*-1\r\n"
                     break
@@ -341,7 +341,7 @@ def WATCH(args, request_ms):
     else:
         for key in args:
             key = bytes(key)
-            thread_state.watched_keys[key] = state.cache[key] if key in state.cache else -1
+            thread_state.watched_keys[key] = state.cache[key] if key in state.cache else None
             return b"+OK\r\n"
 
 
