@@ -350,3 +350,7 @@ def WATCH(args, request_ms):
 def UNWATCH(args, request_ms):
     thread_state.watched_keys = {}
     return b"+OK\r\n"
+
+def INFO(args, request_ms):
+    response = "role:master"
+    return f"${len(response)}\r\n{response}\r\n".encode()
