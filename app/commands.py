@@ -302,25 +302,28 @@ def MULTI(args, request_ms):
     return b"+OK\r\n"
 
 def EXEC(args, request_ms):
-    if not thread_state.queue:
-        return b"-ERR EXEC without MULTI\r\n"
-    else:
-        thread_state.queue = False
+    response = b"-ERR EXEC without MULTI\r\n"
+    if thread_state.queue:
         for watched_key, val in thread_state.watched_keys.items():
             if val != -1:
                 if watched_key not in state.cache or state.cache[watched_key] != val:
-                    return b"*-1\r\n"
+                    response = b"*-1\r\n"
+                    break
             elif watched_key in state.cache:
-                return b"*-1\r\n"
-
-        response = f"*{len(thread_state.command_queue)}\r\n".encode()
-        for command, command_args, command_request_ms in thread_state.command_queue:
-            try:
-                command_response = globals()[command.decode()](command_args, command_request_ms)
-                response += command_response
-            except Exception as e:
-                response += b"-ERR " + str(e).encode() + b"\r\n"
-        return response
+                response = b"*-1\r\n"
+                break
+        else:
+            response = f"*{len(thread_state.command_queue)}\r\n".encode()
+            for command, command_args, command_request_ms in thread_state.command_queue:
+                try:
+                    command_response = globals()[command.decode()](command_args, command_request_ms)
+                    response += command_response
+                except Exception as e:
+                    response += b"-ERR " + str(e).encode() + b"\r\n"
+    thread_state.queue = False
+    thread_state.command_queue = []
+    thread_state.watched_keys = {}
+    return response
 
 def DISCARD(args, request_ms):
     if not thread_state.queue:
@@ -328,6 +331,8 @@ def DISCARD(args, request_ms):
     else:
         thread_state.queue = False
         thread_state.command_queue = []
+        thread_state.watched_keys = {}
+
         return b"+OK\r\n"
 
 def WATCH(args, request_ms):
