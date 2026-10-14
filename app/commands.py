@@ -303,6 +303,7 @@ def MULTI(args, request_ms):
 
 def EXEC(args, request_ms):
     response = b"-ERR EXEC without MULTI\r\n"
+    print(thread_state.watched_keys, thread_state.command_queue, state.cache)
     if thread_state.queue:
         for watched_key, val in thread_state.watched_keys.items():
             if val is not None:
@@ -342,7 +343,8 @@ def WATCH(args, request_ms):
         for key in args:
             key = bytes(key)
             thread_state.watched_keys[key] = state.cache[key] if key in state.cache else None
-            return b"+OK\r\n"
+        return b"+OK\r\n"
+        
 
 
 def UNWATCH(args, request_ms):
