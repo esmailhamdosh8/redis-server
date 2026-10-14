@@ -340,3 +340,6 @@ def WATCH(args, request_ms):
             return b"+OK\r\n"
 
 
+def UNWATCH(args, request_ms):
+    thread_state.watched_keys = {}
+    return b"+OK\r\n"
