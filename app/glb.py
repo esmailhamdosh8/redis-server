@@ -5,7 +5,7 @@ class State:
         self.cache = {}
         self.lists = {}
         self.streams = {}
-
+        self.replica = False
 
 
 state = State()

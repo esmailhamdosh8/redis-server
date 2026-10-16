@@ -2,14 +2,14 @@ import socket  # noqa: F401
 import threading
 import sys
 import time
-from collections import deque
 from .glb import *
 from .commands import *
 
 
 def build_response(parts: list[bytearray], request_ms):
+    parts = [bytes(part) for part in parts]
     command, *args = parts
-    exceptions_commands_to_MULTI = (b'EXEC', b'DISCARD', b'WATCH', b'UNWATCH')
+    exceptions_commands_to_MULTI = (b'EXEC', b'DISCARD', b'WATCH', b'UNWATCH', b'MULTI')
     if thread_state.queue and command not in exceptions_commands_to_MULTI:
         thread_state.command_queue.append((command, args, request_ms))
         return b"+QUEUED\r\n"
@@ -43,7 +43,7 @@ def handle_client(conn):
                         conn.sendall(response)
                     current_request = []
                     cnt_of_args = int(parts[i][1:])
-                    request_ms = int(time.time() * 1000)
+                    request_ms = time.time() * 1000
                 else:
                     if find_len:
                         if not parts[i].startswith(b"$"): raise ValueError
@@ -53,20 +53,12 @@ def handle_client(conn):
                         current_request.append(parts[i])
                         cnt_of_args -= 1
                     find_len = not find_len
-            if not parts[-1] and cnt_of_args == 0:
+            if (not parts[-1] or parts[-1].startswith(b"*")) and cnt_of_args == 0:
                 if current_request:
                     response = build_response(current_request, request_ms)
                     conn.sendall(response)
                 current_request = []
-                buf = b""
-            elif parts[-1].startswith(b"*") and cnt_of_args == 0:
-                if current_request:
-                    response = build_response(current_request, request_ms)
-                    conn.sendall(response)
-                current_request = []
-                buf = parts[-1]
-            else:
-                buf = parts[-1]
+            buf = parts[-1]
     finally:
         conn.close()
 
@@ -86,7 +78,8 @@ def main():
                 port = int(args[i + 1])
             except:
                 pass
-            break
+        elif args[i] == '--replicaof':
+            state.replica = True
     server_socket = socket.create_server(('localhost', port), reuse_port=True)
     while True:
         conn, addr = server_socket.accept()

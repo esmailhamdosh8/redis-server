@@ -10,21 +10,21 @@ def ECHO(args, request_ms):
     return f"${len(args[0])}\r\n".encode() + args[0] + b"\r\n"
 
 def SET(args, request_ms):
-    key, value = bytes(args[0]), args[1]
+    key, value = args[0], args[1]
     if len(args) > 2:
-        duration_ms = int(args[3]) if args[2] == b"PX" else 1000 * args[3]
-        state.cache[key] = [value, request_ms, duration_ms]
+        duration_ms = int(args[3]) if args[2] == b"PX" else 1000 * int(args[3])
+        state.cache[key] = [value, (request_ms, duration_ms)]
     else:
-        state.cache[key] = [value, -1, -1]
+        state.cache[key] = [value, None]
     return b"+OK\r\n"
 
 def GET(args, request_ms):
-    key = bytes(args[0])
+    key = args[0]
     if key not in state.cache:
         response = b"$-1\r\n"
     else:
-        value, saved_ms, duration_ms = state.cache[key]
-        if saved_ms == -1 or duration_ms == -1 or request_ms - saved_ms <= duration_ms:
+        value, info_ms = state.cache[key]
+        if info_ms is None or request_ms - info_ms[0] <= info_ms[1]:
             response = f"${len(value)}\r\n".encode() + value + b"\r\n"
         else:
             del state.cache[key]
@@ -32,7 +32,7 @@ def GET(args, request_ms):
     return response
 
 def RPUSH(args, request_ms):
-    key = bytes(args[0])
+    key = args[0]
     if key not in state.lists:
         state.lists[key] = deque()
     for value in args[1:]:
@@ -40,7 +40,7 @@ def RPUSH(args, request_ms):
     return f":{len(state.lists[key])}\r\n".encode()
 
 def LPUSH(args, request_ms):
-    key = bytes(args[0])
+    key = args[0]
     if key not in state.lists:
         state.lists[key] = deque()
     for value in args[1:]:
@@ -48,9 +48,8 @@ def LPUSH(args, request_ms):
     return f":{len(state.lists[key])}\r\n".encode()
 
 def LRANGE(args, request_ms):
-    key = bytes(args[0])
+    key = args[0]
     if key not in state.lists:
-        state.lists[key] = deque()
         response = b"*0\r\n"
     else:
         n = len(state.lists[key])
@@ -73,7 +72,7 @@ def LRANGE(args, request_ms):
     return response
 
 def LLEN(args, request_ms):
-    key = bytes(args[0])
+    key = args[0]
     if key not in state.lists: 
         response = b":0\r\n"
     else:
@@ -81,37 +80,37 @@ def LLEN(args, request_ms):
     return response
 
 def LPOP(args, request_ms):
-    key = bytes(args[0])
+    key = args[0]
     if key not in state.lists or not state.lists[key]:
         response = b"$-1\r\n"
     else:
         num_to_remove = 1 if len(args) == 1 else min(int(args[1]), len(state.lists[key]))
-        response = f"*{num_to_remove}\r\n".encode() if num_to_remove > 1 else b""
+        response = f"*{num_to_remove}\r\n".encode() if len(args) > 1 else b""
         for _ in range(num_to_remove):
             pop_value = state.lists[key].popleft()
             response += f"${len(pop_value)}\r\n".encode() + pop_value + b"\r\n"
     return response
 
 def BLPOP(args, request_ms):
-    key = bytes(args[0])
-    timeout = float(args[1])
-    deadline = None if timeout == 0 else time.monotonic() + timeout
+    key = args[0]
     if key not in state.lists:
         state.lists[key] = deque()
+    timeout = float(args[1])
+    deadline = None if timeout == 0 else time.time() + timeout
     while True:
         if state.lists[key]:
             pop_value = state.lists[key].popleft()
             response = f"*2\r\n${len(key)}\r\n".encode() + key +\
                     f"\r\n${len(pop_value)}\r\n".encode() + pop_value + b"\r\n"
             break
-        if deadline is not None and time.monotonic() > deadline:
+        if deadline is not None and time.time() > deadline:
             response = b"*-1\r\n"
             break
         time.sleep(0.01)
     return response
 
 def TYPE(args, request_ms):
-    key = bytes(args[0])
+    key = args[0]
     if key in state.cache:
         response = b"+string\r\n"
     elif key in state.streams:
@@ -163,7 +162,6 @@ def generate_entry_id(entry_id, stream):
 def XADD(args, request_ms):
     response = None
     stream_key, entry_id, *parts = args
-    stream_key, entry_id = bytes(stream_key), bytes(entry_id)
     if stream_key not in state.streams:
         state.streams[stream_key] = []
     stream = state.streams[stream_key]
@@ -173,7 +171,7 @@ def XADD(args, request_ms):
         entry = stream[-1][2]
         n = len(parts)
         for i in range(0, n, 2):
-            key_entry = bytes(parts[i])
+            key_entry = parts[i]
             val_entry = parts[i + 1]
             entry[key_entry] = val_entry
         processed_entry_id = f"{milliseconds}-{seq}"
@@ -184,14 +182,12 @@ def XADD(args, request_ms):
 
 def XRANGE(args, request_ms):
     stream_key, entry_id_1, entry_id_2 = args[:3]
-    stream_key, entry_id_1, entry_id_2 = bytes(stream_key), bytes(entry_id_1), bytes(entry_id_2)
     if entry_id_1 == b"-":
         milli_1 = 0
         seq_1 = 0
     elif b"-" in entry_id_1:
         milli_1, _, seq_1 = entry_id_1.partition(b"-")
         milli_1, seq_1 = int(milli_1), int(seq_1)
-        print(milli_1, seq_1)
     else:
         milli_1 = int(entry_id_1)
         seq_1 = 0
@@ -225,8 +221,8 @@ def XRANGE(args, request_ms):
             end = mid - 1
         else:
             start = mid
-    
     end_index = end
+
     response = f"*{end_index - start_index + 1}\r\n".encode()
     for i in range(start_index, end_index + 1):
         entry_id = f"{stream[i][0]}-{stream[i][1]}"
@@ -242,8 +238,8 @@ def XREAD(args, request_ms):
     m = (len(args) - start_of_keys) // 2    
     response = f"*{m}\r\n".encode()
     for i in range(m):
-        stream_key = bytes(args[start_of_keys + i])
-        entry_id = bytes(args[start_of_keys + i + m])
+        stream_key = args[start_of_keys + i]
+        entry_id = args[start_of_keys + i + m]
         if stream_key not in state.streams:
             state.streams[stream_key] = []
         stream = state.streams[stream_key]
@@ -255,9 +251,10 @@ def XREAD(args, request_ms):
         else:
             milli, _, seq = entry_id.partition(b"-")
             milli, seq = int(milli), int(seq)
-        deadline = time.monotonic() * 1000 + block_ms if block_ms != 0 else math.inf
+        deadline = time.time() * 1000 + block_ms if block_ms != 0 else math.inf
         while True:
             n = len(stream)
+
             if n == 0:
                 start_index = 0
             else:
@@ -271,6 +268,7 @@ def XREAD(args, request_ms):
                     else:
                         end = mid
                 start_index = start if (stream[start][0] > milli or (stream[start][0] == milli and stream[start][1] > seq)) else n
+            
             if block_ms == -1 or start_index != n:
                 response += f"*2\r\n${len(stream_key)}\r\n".encode() + stream_key + f"\r\n*{n - start_index}\r\n".encode()
                 for i in range(start_index, n):
@@ -280,30 +278,31 @@ def XREAD(args, request_ms):
                     for key, val in entry.items():
                         response += f"${len(key)}\r\n".encode() + key + f"\r\n${len(val)}\r\n".encode() + val + b"\r\n"
                 break
-            elif time.monotonic() * 1000 > deadline:
+            elif time.time() * 1000 > deadline:
                 return b"*-1\r\n"
             else:
                 time.sleep(0.01)
     return response
 
 def INCR(args, request_ms):
-    key = bytes(args[0])
+    key = args[0]
     if key in state.cache:
         try:
             state.cache[key][0] = str(int(state.cache[key][0]) + 1).encode()
         except:
             return b"-ERR value is not an integer or out of range\r\n"
     else:
-        state.cache[key] = [b"1", -1, -1]
+        state.cache[key] = [b"1", None]
     return b":" + state.cache[key][0] + b"\r\n"
 
 def MULTI(args, request_ms):
+    if thread_state.queue:
+        return b"-ERR MULTI calls can not be nested"
     thread_state.queue = True
     return b"+OK\r\n"
 
 def EXEC(args, request_ms):
     response = b"-ERR EXEC without MULTI\r\n"
-    print(thread_state.watched_keys, thread_state.command_queue, state.cache)
     if thread_state.queue:
         for watched_key, val in thread_state.watched_keys.items():
             if val is not None:
@@ -341,16 +340,15 @@ def WATCH(args, request_ms):
         return b"-ERR WATCH inside MULTI is not allowed\r\n"
     else:
         for key in args:
-            key = bytes(key)
             thread_state.watched_keys[key] = state.cache[key] if key in state.cache else None
         return b"+OK\r\n"
         
-
-
 def UNWATCH(args, request_ms):
     thread_state.watched_keys = {}
     return b"+OK\r\n"
 
 def INFO(args, request_ms):
-    response = "role:master"
+    role = "slave" if state.replica else "master"
+    response = f"role:{role}"
     return f"${len(response)}\r\n{response}\r\n".encode()
+
