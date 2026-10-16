@@ -85,6 +85,10 @@ def main():
             state.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             state.client_socket.connect((master_host, master_port))
             state.client_socket.sendall(b"*1\r\n$4\r\nPING\r\n")
+            if b"+PONG\r\n" in state.client_socket.recv(1024):
+                state.client_socket.sendall(f"*3\r\n$8\r\nREPLCONF\r\n$14\r\nlistening-port\r\n$4\r\n{port}\r\n".encode())
+                if b"+OK\r\n" in state.client_socket.recv(1024):
+                    state.client_socket.sendall(b"*3\r\n$8\r\nREPLCONF\r\n$4\r\ncapa\r\n$6\r\npsync2\r\n")
     server_socket = socket.create_server(('localhost', port), reuse_port=True)
     while True:
         conn, addr = server_socket.accept()

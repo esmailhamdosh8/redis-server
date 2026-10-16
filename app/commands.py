@@ -355,3 +355,11 @@ def INFO(args, request_ms):
     else:
         info = infos[0]
     return f"${len(info)}\r\n{info}\r\n".encode()
+
+def REPLCONF(args, request_ms):
+    if args[0] == b"listening-port":
+        listening_port = int(args[1])
+        state.replica_port = listening_port
+    elif args[0] == b"capa":
+        state.capa = args[1]
+    return b"+OK\r\n"
