@@ -80,6 +80,11 @@ def main():
                 pass
         elif args[i] == '--replicaof':
             state.replica = True
+            master_host, _, master_port = args[i + 1].partition(" ")
+            master_port = int(master_port)
+            state.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            state.client_socket.connect((master_host, master_port))
+            state.client_socket.sendall(b"*1\r\n$4\r\nPING\r\n")
     server_socket = socket.create_server(('localhost', port), reuse_port=True)
     while True:
         conn, addr = server_socket.accept()
