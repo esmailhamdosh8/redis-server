@@ -363,3 +363,8 @@ def REPLCONF(args, request_ms):
     elif args[0] == b"capa":
         state.capa = args[1]
     return b"+OK\r\n"
+
+def PSYNC(args, request_ms):
+    replication_id = args[0]
+    replication_offset = args[1]
+    return f"+FULLRESYNC {replication_id} 0\r\n".encode()
