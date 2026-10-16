@@ -349,6 +349,9 @@ def UNWATCH(args, request_ms):
 
 def INFO(args, request_ms):
     role = "slave" if state.replica else "master"
-    response = f"role:{role}"
-    return f"${len(response)}\r\n{response}\r\n".encode()
-
+    infos = [f"role:{role}", f"master_replid:{state.replication_id}", f"master_repl_offset:{state.replication_offset}"]
+    if len(args) > 0 and args[0] == b"replication":
+        info = "\r\n".join(infos)
+    else:
+        info = infos[0]
+    return f"${len(info)}\r\n{info}\r\n".encode()
