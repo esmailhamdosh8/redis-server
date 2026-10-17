@@ -357,16 +357,23 @@ def INFO(args, request_ms):
     return f"${len(info)}\r\n{info}\r\n".encode()
 
 def REPLCONF(args, request_ms):
+    slave = thread_state.slave_conn
+    for i in range(len(state.slaves)):
+        if state.slaves[i][0] is slave:
+            index = i
+            break
+    else:
+        index = len(state.slaves)
+        state.slaves.append([slave, None, None])
+
     if args[0] == b"listening-port":
-        listening_port = int(args[1])
-        state.replica_port = listening_port
+        state.slaves[index][1] = int(args[1])
     elif args[0] == b"capa":
-        state.capa = args[1]
+        state.slaves[index][2] = args[1]
     return b"+OK\r\n"
 
 def PSYNC(args, request_ms):
     replication_id = args[0]
     replication_offset = args[1]
-    # thread_state.slave_conn.sendall()
     empty_body = bytes.fromhex("524544495330303131fa0972656469732d76657205372e322e30fa0a72656469732d62697473c040fa056374696d65c26d08bc65fa08757365642d6d656dc2b0c41000fa08616f662d62617365c000fff06e3bfec0ff5aa2")
     return b"+FULLRESYNC " + state.replication_id.encode() + b" 0\r\n" + f"${len(empty_body)}\r\n".encode() + empty_body
