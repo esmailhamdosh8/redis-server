@@ -367,4 +367,4 @@ def REPLCONF(args, request_ms):
 def PSYNC(args, request_ms):
     replication_id = args[0]
     replication_offset = args[1]
-    return f"+FULLRESYNC {replication_id} 0\r\n".encode()
+    return b"+FULLRESYNC " + state.replication_id.encode() + b" 0\r\n"
