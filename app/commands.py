@@ -367,4 +367,6 @@ def REPLCONF(args, request_ms):
 def PSYNC(args, request_ms):
     replication_id = args[0]
     replication_offset = args[1]
-    return b"+FULLRESYNC " + state.replication_id.encode() + b" 0\r\n"
+    # thread_state.slave_conn.sendall()
+    empty_body = bytes.fromhex("524544495330303131fa0972656469732d76657205372e322e30fa0a72656469732d62697473c040fa056374696d65c26d08bc65fa08757365642d6d656dc2b0c41000fa08616f662d62617365c000fff06e3bfec0ff5aa2")
+    return b"+FULLRESYNC " + state.replication_id.encode() + b" 0\r\n" + f"${len(empty_body)}\r\n".encode() + empty_body

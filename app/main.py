@@ -21,6 +21,7 @@ def handle_client(conn):
     thread_state.queue = False
     thread_state.command_queue = []
     thread_state.watched_keys = {}
+    thread_state.slave_conn = conn
     buf = bytearray()
     current_request = []
     request_ms = None
