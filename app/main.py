@@ -12,6 +12,9 @@ def write_to_slaves():
             command = state.commands_to_propogate.popleft()
             for slave_conn, _, _ in state.slaves:
                 slave_conn.sendall(command)
+        if state.specific_to_propotgate:
+            slave_conn, response = state.specific_to_propotgate.popleft()
+            slave_conn.sendall(response)
         time.sleep(0.01)
 
 def build_response(parts: list[bytearray], request_ms):
@@ -29,11 +32,12 @@ def build_response(parts: list[bytearray], request_ms):
         state.commands_to_propogate.append(f"*{len(parts)}\r\n".encode() + b"\r\n".join(f"${len(part)}\r\n".encode() + part for part in parts) + b"\r\n")
     return response
 
-def handle_client(conn, respond_to_master):
+def handle_client(conn, respond_type):
     thread_state.queue = False
     thread_state.command_queue = []
     thread_state.watched_keys = {}
     thread_state.slave_conn = conn
+    thread_state.type = respond_type
     buf = bytearray()
     current_request = []
     request_ms = None
@@ -53,8 +57,12 @@ def handle_client(conn, respond_to_master):
                     if not parts[i].startswith(b"*"): raise ValueError
                     if current_request:
                         response = build_response(current_request, request_ms)
-                        if not respond_to_master:
+                        if thread_state.type == 2:
                             conn.sendall(response)
+                        elif thread_state.type == 0 and current_request[:2] == [b"REPLCONF", b"GETACK"]:
+                            conn.sendall(response)
+                        elif thread_state.type == 1:
+                            state.specific_to_propotgate.append([conn, response])
                     current_request = []
                     cnt_of_args = int(parts[i][1:])
                     request_ms = time.time() * 1000
@@ -70,8 +78,12 @@ def handle_client(conn, respond_to_master):
             if (not parts[-1] or parts[-1].startswith(b"*")) and cnt_of_args == 0:
                 if current_request:
                     response = build_response(current_request, request_ms)
-                    if not respond_to_master:
+                    if thread_state.type == 2:
                         conn.sendall(response)
+                    elif thread_state.type == 0 and current_request[:2] == [b"REPLCONF", b"GETACK"]:
+                        conn.sendall(response)
+                    elif thread_state.type == 1:
+                        state.specific_to_propotgate.append([conn, response])
                 current_request = []
             buf = parts[-1]
     finally:
@@ -109,16 +121,17 @@ def main():
                     client_socket.sendall(b"*3\r\n$8\r\nREPLCONF\r\n$4\r\ncapa\r\n$6\r\npsync2\r\n")
                     if b"+OK\r\n" in client_socket.recv(1024):
                         client_socket.sendall(b"*3\r\n$5\r\nPSYNC\r\n$1\r\n?\r\n$2\r\n-1\r\n")
-                        client_socket.recv(4096)
+                        client_socket.recv(149, socket.MSG_WAITALL)
+
                         # recv inital body
-            threading.Thread(target=handle_client, args=(client_socket, True), daemon=True).start()
+            threading.Thread(target=handle_client, args=(client_socket, 0), daemon=True).start()
             
 
 
     server_socket = socket.create_server(('localhost', port), reuse_port=True)
     while True:
         conn, addr = server_socket.accept()
-        threading.Thread(target=handle_client, args=(conn, False), daemon=True).start()
+        threading.Thread(target=handle_client, args=(conn, 2), daemon=True).start()
 
 
 if __name__ == "__main__":

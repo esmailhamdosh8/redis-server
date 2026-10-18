@@ -12,6 +12,8 @@ class State:
         self.replication_offset = 0
         self.slaves = []
         self.commands_to_propogate = deque()
+        self.specific_to_propotgate = deque()
+        self.to_become_slave = deque()
 
 
 state = State()

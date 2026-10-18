@@ -2,6 +2,7 @@ from .glb import *
 from collections import deque
 import time
 import math
+import threading
 
 def PING(args, request_ms):
     return b"+PONG\r\n"
@@ -357,23 +358,29 @@ def INFO(args, request_ms):
     return f"${len(info)}\r\n{info}\r\n".encode()
 
 def REPLCONF(args, request_ms):
+    if args[0] == b"GETACK":
+        return b"*3\r\n$8\r\nREPLCONF\r\n$3\r\nACK\r\n$1\r\n0\r\n"
     slave = thread_state.slave_conn
-    for i in range(len(state.slaves)):
-        if state.slaves[i][0] is slave:
-            index = i
+    index = -1
+    for t_slave, _, _ in state.to_become_slave:
+        index += 1
+        if t_slave is slave:
             break
     else:
-        index = len(state.slaves)
-        state.slaves.append([slave, None, None])
+        index = len(state.to_become_slave)
+        state.to_become_slave.append([slave, None, None])
 
     if args[0] == b"listening-port":
-        state.slaves[index][1] = int(args[1])
+        state.to_become_slave[index][1] = int(args[1])
     elif args[0] == b"capa":
-        state.slaves[index][2] = args[1]
+        state.to_become_slave[index][2] = args[1]
     return b"+OK\r\n"
 
 def PSYNC(args, request_ms):
     replication_id = args[0]
     replication_offset = args[1]
     empty_body = bytes.fromhex("524544495330303131fa0972656469732d76657205372e322e30fa0a72656469732d62697473c040fa056374696d65c26d08bc65fa08757365642d6d656dc2b0c41000fa08616f662d62617365c000fff06e3bfec0ff5aa2")
+    thread_state.type = 1
+    while state.to_become_slave:
+        state.slaves.append(state.to_become_slave.popleft())
     return b"+FULLRESYNC " + state.replication_id.encode() + b" 0\r\n" + f"${len(empty_body)}\r\n".encode() + empty_body
