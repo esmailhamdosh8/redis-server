@@ -100,17 +100,18 @@ def main():
             state.replica = True
             master_host, _, master_port = args[i + 1].partition(" ")
             master_port = int(master_port)
-            state.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            state.client_socket.connect((master_host, master_port))
-            state.client_socket.sendall(b"*1\r\n$4\r\nPING\r\n")
-            if b"+PONG\r\n" in state.client_socket.recv(1024):
-                state.client_socket.sendall(f"*3\r\n$8\r\nREPLCONF\r\n$14\r\nlistening-port\r\n$4\r\n{port}\r\n".encode())
-                if b"+OK\r\n" in state.client_socket.recv(1024):
-                    state.client_socket.sendall(b"*3\r\n$8\r\nREPLCONF\r\n$4\r\ncapa\r\n$6\r\npsync2\r\n")
-                    if b"+OK\r\n" in state.client_socket.recv(1024):
-                        state.client_socket.sendall(b"*3\r\n$5\r\nPSYNC\r\n$1\r\n?\r\n$2\r\n-1\r\n")
+            client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            client_socket.connect((master_host, master_port))
+            client_socket.sendall(b"*1\r\n$4\r\nPING\r\n")
+            if b"+PONG\r\n" in client_socket.recv(1024):
+                client_socket.sendall(f"*3\r\n$8\r\nREPLCONF\r\n$14\r\nlistening-port\r\n$4\r\n{port}\r\n".encode())
+                if b"+OK\r\n" in client_socket.recv(1024):
+                    client_socket.sendall(b"*3\r\n$8\r\nREPLCONF\r\n$4\r\ncapa\r\n$6\r\npsync2\r\n")
+                    if b"+OK\r\n" in client_socket.recv(1024):
+                        client_socket.sendall(b"*3\r\n$5\r\nPSYNC\r\n$1\r\n?\r\n$2\r\n-1\r\n")
+                        client_socket.recv(4096)
                         # recv inital body
-            threading.Thread(target=handle_client, args=(state.client_socket, True), daemon=True).start()
+            threading.Thread(target=handle_client, args=(client_socket, True), daemon=True).start()
             
 
 
