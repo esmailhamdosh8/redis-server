@@ -17,6 +17,7 @@ class State:
         self.commands_to_propogate = deque()
         self.specific_to_propotgate = deque()
         self.to_become_slave = deque()
+        self.propogate_to_slave_commands = (b'SET', )
 
 
 state = State()

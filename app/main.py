@@ -7,9 +7,6 @@ from .glb import *
 from .commands import *
 
 
-def build_command(parts):
-    return f"*{len(parts)}\r\n".encode() + b"\r\n".join(f"${len(part)}\r\n".encode() + part for part in parts) + b"\r\n"
-
 def write_to_slaves():
     while True:
         if state.commands_to_propogate:
@@ -24,15 +21,14 @@ def write_to_slaves():
 def build_response(parts: list[bytearray], request_ms):
     parts = [bytes(part) for part in parts]
     command, *args = parts
-    exceptions_commands_to_MULTI = (b'EXEC', b'DISCARD', b'WATCH', b'UNWATCH', b'MULTI')
-    propogate_to_slave_commands = (b'SET', )
+    exceptions_commands_to_MULTI = (b'EXEC', b'DISCARD', b'WATCH', b'MULTI')
     if thread_state.in_multi and command not in exceptions_commands_to_MULTI:
         thread_state.command_queue.append((command, args, request_ms))
         response = b"+QUEUED\r\n"
     else:
         response = globals()[command.decode()](args, request_ms)
 
-    if command in propogate_to_slave_commands:
+    if command in state.propogate_to_slave_commands:
         state.commands_to_propogate.append(build_command(parts))
     return response
 
@@ -72,7 +68,6 @@ def handle_client(conn, respond_type):
                     if current_request:
                         response = build_response(current_request, request_ms)
                         if thread_state.type == 0:
-                            if current_request[0] != b"PSYNC":
                                 command = build_command(current_request)
                                 state.offset += len(command)
                         respond(thread_state.type, conn, response, current_request)
@@ -91,6 +86,9 @@ def handle_client(conn, respond_type):
             if (not parts[-1] or parts[-1].startswith(b"*")) and cnt_of_args == 0:
                 if current_request:
                     response = build_response(current_request, request_ms)
+                    if thread_state.type == 0:
+                        command = build_command(current_request)
+                        state.offset += len(command)
                     respond(thread_state.type, conn, response, current_request)
                 current_request = []
             buf = parts[-1]

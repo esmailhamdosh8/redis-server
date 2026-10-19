@@ -5,6 +5,10 @@ import math
 import threading
 import bisect
 
+
+def build_command(parts):
+    return f"*{len(parts)}\r\n".encode() + b"\r\n".join(f"${len(part)}\r\n".encode() + part for part in parts) + b"\r\n"
+
 def PING(args: list[bytes], request_ms: float) -> bytes:
     return b"+PONG\r\n"
 
@@ -304,7 +308,7 @@ def MULTI(args: list[bytes], request_ms: float) -> bytes:
     thread_state.in_multi = True
     return b"+OK\r\n"
 
-def EXEC(args, request_ms):
+def EXEC(args: list[bytes], request_ms: float) -> bytes:
     response = b"-ERR EXEC without MULTI\r\n"
     if thread_state.in_multi:
         for watched_key, val in thread_state.watched_keys.items():
@@ -319,11 +323,14 @@ def EXEC(args, request_ms):
                 if response == b"*-1\r\n": break
             else:
                 if any(watched_key in che for che in [state.cache, state.lists, state.streams]):
+                    response = b"*-1\r\n"
                     break
         else:
             response = f"*{len(thread_state.command_queue)}\r\n".encode()
             for command, command_args, command_request_ms in thread_state.command_queue:
                 try:
+                    if command in state.propogate_to_slave_commands:
+                        state.commands_to_propogate.append(build_command([command] + command_args))
                     command_response = globals()[command.decode()](command_args, command_request_ms)
                     response += command_response
                 except Exception as e:
@@ -333,7 +340,7 @@ def EXEC(args, request_ms):
     thread_state.watched_keys = {}
     return response
 
-def DISCARD(args, request_ms):
+def DISCARD(args: list[bytes], request_ms: float) -> bytes:
     if not thread_state.in_multi:
         return b"-ERR DISCARD without MULTI\r\n"
     else:
@@ -343,7 +350,7 @@ def DISCARD(args, request_ms):
 
         return b"+OK\r\n"
 
-def WATCH(args, request_ms):
+def WATCH(args: list[bytes], request_ms: float) -> bytes:
     if thread_state.in_multi:
         return b"-ERR WATCH inside MULTI is not allowed\r\n"
     else:
@@ -360,11 +367,11 @@ def WATCH(args, request_ms):
 
         return b"+OK\r\n"
         
-def UNWATCH(args, request_ms):
+def UNWATCH(args: list[bytes], request_ms: float) -> bytes:
     thread_state.watched_keys = {}
     return b"+OK\r\n"
 
-def INFO(args, request_ms):
+def INFO(args: list[bytes], request_ms: float) -> bytes:
     role = "slave" if state.replica else "master"
     infos = [f"role:{role}", f"master_replid:{state.replication_id}", f"master_repl_offset:{state.replication_offset}"]
     if len(args) > 0 and args[0] == b"replication":
@@ -373,18 +380,18 @@ def INFO(args, request_ms):
         info = infos[0]
     return f"${len(info)}\r\n{info}\r\n".encode()
 
-def REPLCONF(args, request_ms):
+def REPLCONF(args: list[bytes], request_ms: float) -> bytes:
     if args[0] == b"GETACK":
         return f"*3\r\n$8\r\nREPLCONF\r\n$3\r\nACK\r\n${len(str(state.offset))}\r\n{state.offset}\r\n".encode()
-    slave = thread_state.slave_conn
+    slave_conn = thread_state.slave_conn
     index = -1
     for t_slave, _, _ in state.to_become_slave:
         index += 1
-        if t_slave is slave:
+        if t_slave is slave_conn:
             break
     else:
         index = len(state.to_become_slave)
-        state.to_become_slave.append([slave, None, None])
+        state.to_become_slave.append([slave_conn, None, None])
 
     if args[0] == b"listening-port":
         state.to_become_slave[index][1] = int(args[1])
@@ -392,11 +399,12 @@ def REPLCONF(args, request_ms):
         state.to_become_slave[index][2] = args[1]
     return b"+OK\r\n"
 
-def PSYNC(args, request_ms):
+def PSYNC(args: list[bytes], request_ms: float) -> bytes:
     replication_id = args[0]
     replication_offset = args[1]
     empty_body = bytes.fromhex("524544495330303131fa0972656469732d76657205372e322e30fa0a72656469732d62697473c040fa056374696d65c26d08bc65fa08757365642d6d656dc2b0c41000fa08616f662d62617365c000fff06e3bfec0ff5aa2")
     thread_state.type = 1
+    thread_state.slave_conn.sendall(b"+FULLRESYNC " + state.replication_id.encode() + b" 0\r\n" + f"${len(empty_body)}\r\n".encode() + empty_body)
     while state.to_become_slave:
         state.slaves.append(state.to_become_slave.popleft())
-    return b"+FULLRESYNC " + state.replication_id.encode() + b" 0\r\n" + f"${len(empty_body)}\r\n".encode() + empty_body
+    return b""
