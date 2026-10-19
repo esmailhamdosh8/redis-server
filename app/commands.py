@@ -410,4 +410,6 @@ def PSYNC(args: list[bytes], request_ms: float) -> bytes:
     return b""
 
 def WAIT(args: list[bytes], request_ms: float) -> bytes:
-    return b":0\r\n"
+    num_replicas = int(args[0])
+    time_to_waint = int(args[1])
+    return f":{len(state.slaves)}\r\n".encode()
