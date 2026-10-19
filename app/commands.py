@@ -3,15 +3,20 @@ from collections import deque
 import time
 import math
 import threading
+import bisect
 
-def PING(args, request_ms):
+def PING(args: list[bytes], request_ms: float) -> bytes:
     return b"+PONG\r\n"
 
-def ECHO(args, request_ms):
+def ECHO(args: list[bytes], request_ms: float) -> bytes:
     return f"${len(args[0])}\r\n".encode() + args[0] + b"\r\n"
 
-def SET(args, request_ms):
+def SET(args: list[bytes], request_ms: float) -> bytes:
     key, value = args[0], args[1]
+    if key in state.lists:
+        del state.lists[key]
+    if key in state.streams:
+        del state.streams[key]
     if len(args) > 2:
         duration_ms = int(args[3]) if args[2] == b"PX" else 1000 * int(args[3])
         state.cache[key] = [value, (request_ms, duration_ms)]
@@ -19,8 +24,10 @@ def SET(args, request_ms):
         state.cache[key] = [value, None]
     return b"+OK\r\n"
 
-def GET(args, request_ms):
+def GET(args: list[bytes], request_ms: float) -> bytes:
     key = args[0]
+    if key in state.lists or key in state.streams:
+        return b"-WRONGTYPE Operation against a key holding the wrong kind of value\r\n"
     if key not in state.cache:
         response = b"$-1\r\n"
     else:
@@ -32,24 +39,30 @@ def GET(args, request_ms):
             response = b"$-1\r\n"
     return response
 
-def RPUSH(args, request_ms):
+def RPUSH(args: list[bytes], request_ms: float) -> bytes:
     key = args[0]
+    if key in state.cache or key in state.streams:
+        return b"-WRONGTYPE Operation against a key holding the wrong kind of value\r\n"
     if key not in state.lists:
         state.lists[key] = deque()
     for value in args[1:]:
         state.lists[key].append(value)
     return f":{len(state.lists[key])}\r\n".encode()
 
-def LPUSH(args, request_ms):
+def LPUSH(args: list[bytes], request_ms: float) -> bytes:
     key = args[0]
+    if key in state.cache or key in state.streams:
+        return b"-WRONGTYPE Operation against a key holding the wrong kind of value\r\n"
     if key not in state.lists:
         state.lists[key] = deque()
     for value in args[1:]:
         state.lists[key].appendleft(value)
     return f":{len(state.lists[key])}\r\n".encode()
 
-def LRANGE(args, request_ms):
+def LRANGE(args: list[bytes], request_ms: float) -> bytes:
     key = args[0]
+    if key in state.cache or key in state.streams:
+        return b"-WRONGTYPE Operation against a key holding the wrong kind of value\r\n"
     if key not in state.lists:
         response = b"*0\r\n"
     else:
@@ -72,16 +85,20 @@ def LRANGE(args, request_ms):
                 i += 1
     return response
 
-def LLEN(args, request_ms):
+def LLEN(args: list[bytes], request_ms: float) -> bytes:
     key = args[0]
+    if key in state.cache or key in state.streams:
+        return b"-WRONGTYPE Operation against a key holding the wrong kind of value\r\n"
     if key not in state.lists: 
         response = b":0\r\n"
     else:
         response = f":{len(state.lists[key])}\r\n".encode()
     return response
 
-def LPOP(args, request_ms):
+def LPOP(args: list[bytes], request_ms: float) -> bytes:
     key = args[0]
+    if key in state.cache or key in state.streams:
+        return b"-WRONGTYPE Operation against a key holding the wrong kind of value\r\n"
     if key not in state.lists or not state.lists[key]:
         response = b"$-1\r\n"
     else:
@@ -92,8 +109,10 @@ def LPOP(args, request_ms):
             response += f"${len(pop_value)}\r\n".encode() + pop_value + b"\r\n"
     return response
 
-def BLPOP(args, request_ms):
+def BLPOP(args: list[bytes], request_ms: float) -> bytes:
     key = args[0]
+    if key in state.cache or key in state.streams:
+        return b"-WRONGTYPE Operation against a key holding the wrong kind of value\r\n"
     if key not in state.lists:
         state.lists[key] = deque()
     timeout = float(args[1])
@@ -110,18 +129,25 @@ def BLPOP(args, request_ms):
         time.sleep(0.01)
     return response
 
-def TYPE(args, request_ms):
+def TYPE(args: list[bytes], request_ms: float) -> bytes:
     key = args[0]
     if key in state.cache:
-        response = b"+string\r\n"
+        _, info_ms = state.cache[key]
+        if info_ms is None or request_ms - info_ms[0] <= info_ms[1]:
+            response = b"+string\r\n"
+        else:
+            del state.cache[key]
+            response = b"+none\r\n"
     elif key in state.streams:
         response = b"+stream\r\n"
+    elif key in state.lists:
+        response = b"+lists\r\n"
     else:
         response = b"+none\r\n" 
     return response
 
 # XADD helper
-def generate_entry_id(entry_id, stream):
+def generate_entry_id(entry_id: bytes, stream: list[list]) -> tuple[int, int]:
     if entry_id == b"*":
         milliseconds = int(time.time() * 1000)
         if not stream:
@@ -142,9 +168,9 @@ def generate_entry_id(entry_id, stream):
             raise ValueError(b"-ERR The ID specified in XADD is equal or smaller than the target stream top item\r\n")
         if seq != b"*":
             seq = int(seq)
+            if milliseconds == 0 and seq == 0:
+                raise ValueError(b"-ERR The ID specified in XADD must be greater than 0-0\r\n")
             if stream and milliseconds == stream[-1][0] and seq <= stream[-1][1]:
-                if milliseconds == 0 and seq == 0:
-                    raise ValueError(b"-ERR The ID specified in XADD must be greater than 0-0\r\n")
                 raise ValueError(b"-ERR The ID specified in XADD is equal or smaller than the target stream top item\r\n")
         elif not stream:
             if milliseconds == 0:
@@ -157,12 +183,13 @@ def generate_entry_id(entry_id, stream):
                 seq = 0
             else:
                 seq = last_seq + 1
-    if milliseconds == 0 and seq == 0: raise ValueError(b"-ERR The ID specified in XADD must be greater than 0-0\r\n")
     return milliseconds, seq
 
-def XADD(args, request_ms):
+def XADD(args: list[bytes], request_ms: float) -> bytes:
     response = None
     stream_key, entry_id, *parts = args
+    if stream_key in state.cache or stream_key in state.lists:
+        return b"-WRONGTYPE Operation against a key holding the wrong kind of value\r\n"
     if stream_key not in state.streams:
         state.streams[stream_key] = []
     stream = state.streams[stream_key]
@@ -181,8 +208,10 @@ def XADD(args, request_ms):
         response = e.args[0]
     return response
 
-def XRANGE(args, request_ms):
+def XRANGE(args: list[bytes], request_ms: float) -> bytes:
     stream_key, entry_id_1, entry_id_2 = args[:3]
+    if stream_key in state.cache or stream_key in state.lists:
+        return b"-WRONGTYPE Operation against a key holding the wrong kind of value\r\n"
     if entry_id_1 == b"-":
         milli_1 = 0
         seq_1 = 0
@@ -202,28 +231,8 @@ def XRANGE(args, request_ms):
         milli_2 = int(entry_id_2)
         seq_2 = math.inf
     stream = state.streams[stream_key]
-    start_index, end_index = None, None
-    start, end = 0, len(stream) - 1
-    while start < end:
-        mid = (start + end) // 2
-        if stream[mid][0] < milli_1:
-            start = mid + 1
-        elif stream[mid][0] == milli_1 and stream[mid][1] < seq_1:
-            start = mid + 1
-        else:
-            end = mid
-    start_index = start
-    start, end = 0, len(stream) - 1
-    while start < end:
-        mid = (start + end + 1) // 2
-        if stream[mid][0] > milli_2:
-            end = mid - 1
-        elif stream[mid][0] == milli_2 and stream[mid][1] > seq_2:
-            end = mid - 1
-        else:
-            start = mid
-    end_index = end
-
+    start_index = bisect.bisect_left(stream, (milli_1, seq_1), key=lambda x: (x[0], x[1]))
+    end_index = bisect.bisect_right(stream, (milli_2, seq_2), key=lambda x: (x[0], x[1])) - 1
     response = f"*{end_index - start_index + 1}\r\n".encode()
     for i in range(start_index, end_index + 1):
         entry_id = f"{stream[i][0]}-{stream[i][1]}"
@@ -232,12 +241,17 @@ def XRANGE(args, request_ms):
         for key, val in entry.items():
             response += f"${len(key)}\r\n".encode() + key + f"\r\n${len(val)}\r\n".encode() + val + b"\r\n"
     return response
-
-def XREAD(args, request_ms):
+            
+def XREAD(args: list[bytes], request_ms: float) -> bytes:
     block_ms = -1 if args[0] == b"streams" else int(args[1])
     start_of_keys = 1 if args[0] == b"streams" else 3
     m = (len(args) - start_of_keys) // 2    
     response = f"*{m}\r\n".encode()
+    for i in range(m):
+        stream_key = args[start_of_keys + i]
+        if stream_key in state.cache or stream_key in state.lists:
+            return b"-WRONGTYPE Operation against a key holding the wrong kind of value\r\n"
+
     for i in range(m):
         stream_key = args[start_of_keys + i]
         entry_id = args[start_of_keys + i + m]
@@ -255,21 +269,7 @@ def XREAD(args, request_ms):
         deadline = time.time() * 1000 + block_ms if block_ms != 0 else math.inf
         while True:
             n = len(stream)
-
-            if n == 0:
-                start_index = 0
-            else:
-                start, end = 0, n - 1
-                while start < end:
-                    mid = (start + end) // 2
-                    if stream[mid][0] < milli:
-                        start = mid + 1
-                    elif stream[mid][0] == milli and stream[mid][1] <= seq:
-                        start = mid + 1
-                    else:
-                        end = mid
-                start_index = start if (stream[start][0] > milli or (stream[start][0] == milli and stream[start][1] > seq)) else n
-            
+            start_index = bisect.bisect_right(stream, (milli, seq), key=lambda x: (x[0], x[1]))
             if block_ms == -1 or start_index != n:
                 response += f"*2\r\n${len(stream_key)}\r\n".encode() + stream_key + f"\r\n*{n - start_index}\r\n".encode()
                 for i in range(start_index, n):
@@ -285,8 +285,10 @@ def XREAD(args, request_ms):
                 time.sleep(0.01)
     return response
 
-def INCR(args, request_ms):
+def INCR(args: list[bytes], request_ms: float) -> bytes:
     key = args[0]
+    if key in state.streams or key in state.lists:
+        return b"-WRONGTYPE Operation against a key holding the wrong kind of value\r\n"
     if key in state.cache:
         try:
             state.cache[key][0] = str(int(state.cache[key][0]) + 1).encode()
@@ -296,23 +298,28 @@ def INCR(args, request_ms):
         state.cache[key] = [b"1", None]
     return b":" + state.cache[key][0] + b"\r\n"
 
-def MULTI(args, request_ms):
-    if thread_state.queue:
+def MULTI(args: list[bytes], request_ms: float) -> bytes:
+    if thread_state.in_multi:
         return b"-ERR MULTI calls can not be nested"
-    thread_state.queue = True
+    thread_state.in_multi = True
     return b"+OK\r\n"
 
 def EXEC(args, request_ms):
     response = b"-ERR EXEC without MULTI\r\n"
-    if thread_state.queue:
+    if thread_state.in_multi:
         for watched_key, val in thread_state.watched_keys.items():
             if val is not None:
-                if watched_key not in state.cache or state.cache[watched_key] != val:
+                for che in [state.cache, state.lists, state.streams]:
+                    if watched_key in che:
+                        if val != che[watched_key]:
+                            response = b"*-1\r\n"
+                        break
+                else:
                     response = b"*-1\r\n"
+                if response == b"*-1\r\n": break
+            else:
+                if any(watched_key in che for che in [state.cache, state.lists, state.streams]):
                     break
-            elif watched_key in state.cache:
-                response = b"*-1\r\n"
-                break
         else:
             response = f"*{len(thread_state.command_queue)}\r\n".encode()
             for command, command_args, command_request_ms in thread_state.command_queue:
@@ -321,27 +328,36 @@ def EXEC(args, request_ms):
                     response += command_response
                 except Exception as e:
                     response += b"-ERR " + str(e).encode() + b"\r\n"
-    thread_state.queue = False
+    thread_state.in_multi = False
     thread_state.command_queue = []
     thread_state.watched_keys = {}
     return response
 
 def DISCARD(args, request_ms):
-    if not thread_state.queue:
+    if not thread_state.in_multi:
         return b"-ERR DISCARD without MULTI\r\n"
     else:
-        thread_state.queue = False
+        thread_state.in_multi = False
         thread_state.command_queue = []
         thread_state.watched_keys = {}
 
         return b"+OK\r\n"
 
 def WATCH(args, request_ms):
-    if thread_state.queue:
+    if thread_state.in_multi:
         return b"-ERR WATCH inside MULTI is not allowed\r\n"
     else:
         for key in args:
-            thread_state.watched_keys[key] = state.cache[key] if key in state.cache else None
+            if key in state.cache:
+                thread_state.watched_keys[key] = state.cache[key]
+            elif key in state.streams:
+                thread_state.watched_keys[key] = state.streams[key]
+            elif key in state.lists:
+                thread_state.watched_keys[key] = state.lists[key]
+            else:
+                thread_state.watched_keys[key] = None
+
+
         return b"+OK\r\n"
         
 def UNWATCH(args, request_ms):
@@ -359,7 +375,7 @@ def INFO(args, request_ms):
 
 def REPLCONF(args, request_ms):
     if args[0] == b"GETACK":
-        return b"*3\r\n$8\r\nREPLCONF\r\n$3\r\nACK\r\n$1\r\n0\r\n"
+        return f"*3\r\n$8\r\nREPLCONF\r\n$3\r\nACK\r\n${len(str(state.offset))}\r\n{state.offset}\r\n".encode()
     slave = thread_state.slave_conn
     index = -1
     for t_slave, _, _ in state.to_become_slave:

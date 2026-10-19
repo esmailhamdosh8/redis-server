@@ -2,9 +2,13 @@ import socket  # noqa: F401
 import threading
 import sys
 import time
+import argparse
 from .glb import *
 from .commands import *
 
+
+def build_command(parts):
+    return f"*{len(parts)}\r\n".encode() + b"\r\n".join(f"${len(part)}\r\n".encode() + part for part in parts) + b"\r\n"
 
 def write_to_slaves():
     while True:
@@ -22,22 +26,32 @@ def build_response(parts: list[bytearray], request_ms):
     command, *args = parts
     exceptions_commands_to_MULTI = (b'EXEC', b'DISCARD', b'WATCH', b'UNWATCH', b'MULTI')
     propogate_to_slave_commands = (b'SET', )
-    if thread_state.queue and command not in exceptions_commands_to_MULTI:
+    if thread_state.in_multi and command not in exceptions_commands_to_MULTI:
         thread_state.command_queue.append((command, args, request_ms))
         response = b"+QUEUED\r\n"
     else:
         response = globals()[command.decode()](args, request_ms)
 
     if command in propogate_to_slave_commands:
-        state.commands_to_propogate.append(f"*{len(parts)}\r\n".encode() + b"\r\n".join(f"${len(part)}\r\n".encode() + part for part in parts) + b"\r\n")
+        state.commands_to_propogate.append(build_command(parts))
     return response
 
+
+def respond(typ, conn, response, current_request):
+    if typ == 2:
+        conn.sendall(response)
+    elif typ == 0 and current_request[:2] == [b"REPLCONF", b"GETACK"]:
+        conn.sendall(response)
+    elif typ == 1:
+        state.specific_to_propotgate.append([conn, response])
+
 def handle_client(conn, respond_type):
-    thread_state.queue = False
+    thread_state.in_multi = False
     thread_state.command_queue = []
     thread_state.watched_keys = {}
     thread_state.slave_conn = conn
     thread_state.type = respond_type
+
     buf = bytearray()
     current_request = []
     request_ms = None
@@ -57,12 +71,11 @@ def handle_client(conn, respond_type):
                     if not parts[i].startswith(b"*"): raise ValueError
                     if current_request:
                         response = build_response(current_request, request_ms)
-                        if thread_state.type == 2:
-                            conn.sendall(response)
-                        elif thread_state.type == 0 and current_request[:2] == [b"REPLCONF", b"GETACK"]:
-                            conn.sendall(response)
-                        elif thread_state.type == 1:
-                            state.specific_to_propotgate.append([conn, response])
+                        if thread_state.type == 0:
+                            if current_request[0] != b"PSYNC":
+                                command = build_command(current_request)
+                                state.offset += len(command)
+                        respond(thread_state.type, conn, response, current_request)
                     current_request = []
                     cnt_of_args = int(parts[i][1:])
                     request_ms = time.time() * 1000
@@ -78,17 +91,30 @@ def handle_client(conn, respond_type):
             if (not parts[-1] or parts[-1].startswith(b"*")) and cnt_of_args == 0:
                 if current_request:
                     response = build_response(current_request, request_ms)
-                    if thread_state.type == 2:
-                        conn.sendall(response)
-                    elif thread_state.type == 0 and current_request[:2] == [b"REPLCONF", b"GETACK"]:
-                        conn.sendall(response)
-                    elif thread_state.type == 1:
-                        state.specific_to_propotgate.append([conn, response])
+                    respond(thread_state.type, conn, response, current_request)
                 current_request = []
             buf = parts[-1]
     finally:
         conn.close()
 
+
+
+def set_up_communication_with_master(replicaof, port):
+    if replicaof:
+        state.replica = True
+        master_host, _, master_port = replicaof.partition(' ')
+        master_port = int(master_port)
+        client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        client_socket.connect((master_host, master_port))
+        client_socket.sendall(b"*1\r\n$4\r\nPING\r\n")
+        if b"+PONG\r\n" in client_socket.recv(7, socket.MSG_WAITALL):
+            client_socket.sendall(f"*3\r\n$8\r\nREPLCONF\r\n$14\r\nlistening-port\r\n$4\r\n{port}\r\n".encode())
+            if b"+OK\r\n" in client_socket.recv(5, socket.MSG_WAITALL):
+                client_socket.sendall(b"*3\r\n$8\r\nREPLCONF\r\n$4\r\ncapa\r\n$6\r\npsync2\r\n")
+                if b"+OK\r\n" in client_socket.recv(5, socket.MSG_WAITALL):
+                    client_socket.sendall(b"*3\r\n$5\r\nPSYNC\r\n$1\r\n?\r\n$2\r\n-1\r\n")
+                    body = client_socket.recv(149, socket.MSG_WAITALL)
+                    threading.Thread(target=handle_client, args=(client_socket, 0), daemon=True).start()
 
 def main():
     # You can use print statements as follows for debugging, they'll be visible when running tests.
@@ -99,33 +125,12 @@ def main():
 
     threading.Thread(target=write_to_slaves, daemon=True).start()
 
-    args = sys.argv
-    n = len(args)
-    port = 6379
-    for i in range(n):
-        if args[i] == '--port' and i + 1 < n:
-            try:
-                port = int(args[i + 1])
-            except:
-                pass
-        elif args[i] == '--replicaof':
-            state.replica = True
-            master_host, _, master_port = args[i + 1].partition(" ")
-            master_port = int(master_port)
-            client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            client_socket.connect((master_host, master_port))
-            client_socket.sendall(b"*1\r\n$4\r\nPING\r\n")
-            if b"+PONG\r\n" in client_socket.recv(1024):
-                client_socket.sendall(f"*3\r\n$8\r\nREPLCONF\r\n$14\r\nlistening-port\r\n$4\r\n{port}\r\n".encode())
-                if b"+OK\r\n" in client_socket.recv(1024):
-                    client_socket.sendall(b"*3\r\n$8\r\nREPLCONF\r\n$4\r\ncapa\r\n$6\r\npsync2\r\n")
-                    if b"+OK\r\n" in client_socket.recv(1024):
-                        client_socket.sendall(b"*3\r\n$5\r\nPSYNC\r\n$1\r\n?\r\n$2\r\n-1\r\n")
-                        client_socket.recv(149, socket.MSG_WAITALL)
-
-                        # recv inital body
-            threading.Thread(target=handle_client, args=(client_socket, 0), daemon=True).start()
-            
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--port', type=int, default=6379)
+    parser.add_argument('--replicaof', type=str)
+    args = parser.parse_args()
+    port = args.port
+    set_up_communication_with_master(args.replicaof, port)
 
 
     server_socket = socket.create_server(('localhost', port), reuse_port=True)
