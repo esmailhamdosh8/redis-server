@@ -408,3 +408,6 @@ def PSYNC(args: list[bytes], request_ms: float) -> bytes:
     while state.to_become_slave:
         state.slaves.append(state.to_become_slave.popleft())
     return b""
+
+def WAIT(args: list[bytes], request_ms: float) -> bytes:
+    return b":0\r\n"
