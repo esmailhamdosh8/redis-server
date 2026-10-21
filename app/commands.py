@@ -434,3 +434,11 @@ def WAIT(args: list[bytes], request_ms: float) -> bytes:
         break
     state.sent_bytes += len(getack_command)
     return f":{num}\r\n".encode()
+
+def CONFIG(args: list[bytes], request_ms: float) -> bytes:
+    if args[0] == b'GET':
+        argument = {b'dir': state.args.dir, b'dbfilename': state.args.dbfilename}.get(args[1])
+        if argument is None:
+            return b"-ERR No Such Argument Exists\r\n"
+        return f"*2\r\n${len(args[1])}\r\n".encode() + args[1] + f"\r\n${len(argument)}\r\n{argument}\r\n".encode()
+    return b"-ERR No Such Command Exists\r\n"

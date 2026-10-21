@@ -128,7 +128,10 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--port', type=int, default=6379)
     parser.add_argument('--replicaof', type=str)
+    parser.add_argument('--dir', type=str)
+    parser.add_argument('--dbfilename', type=str)
     args = parser.parse_args()
+    state.args = args
     port = args.port
     set_up_communication_with_master(args.replicaof, port)
 
