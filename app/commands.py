@@ -4,6 +4,7 @@ import time
 import math
 import threading
 import bisect
+import os
 
 
 def build_command(parts):
@@ -442,3 +443,52 @@ def CONFIG(args: list[bytes], request_ms: float) -> bytes:
             return b"-ERR No Such Argument Exists\r\n"
         return f"*2\r\n${len(args[1])}\r\n".encode() + args[1] + f"\r\n${len(argument)}\r\n{argument}\r\n".encode()
     return b"-ERR No Such Command Exists\r\n"
+
+def read_bytes(file, first_byte):
+    first_byte = int.from_bytes(first_byte)
+    if first_byte & 192 == 0: # 1100 0000
+        bytes_to_read = first_byte & 63 # 0011 1111
+    elif first_byte & 192 == 64:
+        bytes_to_read = (first_byte & 63) * 256 + int.from_bytes(file.read(1))
+    elif first_byte & 192 == 128:
+        bytes_to_read = int.from_bytes(file.read(4), byteorder='big')
+    else:
+        r6 = first_byte & 63
+        if r6 <= 2:
+            bytes_to_read = 1 << r6
+        else:
+            return b"-ERR Unsupported Number (6-bit) For 0x11\r\n"
+    return file.read(bytes_to_read)
+
+def KEYS(args: list[bytes], request_ms: float) -> bytes:
+    if state.args.dir is None or state.args.dbfilename is None: return b"*0\r\n"
+    path = os.path.join(state.args.dir, state.args.dbfilename)
+    if not os.path.exists(path): return b"*0\r\n"
+    with open(path, 'rb') as file:
+        magic_number = file.read(9)
+        if magic_number != bytes.fromhex("524544495330303131"): return b"-ERR Invalid Magic Number\r\n"
+        file.read(1) # FA
+        while True:
+            first_byte = file.read(1)
+            if first_byte == bytes.fromhex('FE'): break
+            read_bytes(file, first_byte)
+        file.read(4) # index + FB + 2 bytes
+        keys = []
+        while True:
+            typ = file.read(1) # type of val
+            if typ == bytes.fromhex("FF"): 
+                file.read(8) # checksum
+                break # we reach the end
+            first_key = file.read(1)
+            key = read_bytes(file, first_key)
+            print(key)
+            if key.startswith(b"-ERR"): return key
+            keys.append(key)
+            first_val = file.read(1)
+            read_bytes(file, first_val)
+            next_byte = file.peek(1)[:1]
+            if next_byte == bytes.fromhex('FC'):
+                file.read(9) # 1 + 8
+            elif next_byte == bytes.fromhex('FD'):
+                file.read(5) # 1 + 4
+    return f"*{len(keys)}\r\n".encode() + b"\r\n".join(f"${len(key)}\r\n".encode() + key for key in keys) + b"\r\n"
