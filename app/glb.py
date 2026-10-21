@@ -19,6 +19,9 @@ class State:
         self.to_become_slave = deque()
         self.propogate_to_slave_commands = (b'SET', )
 
+        self.sent_bytes = 0
+        self.slaves_offset = {}
+
 
 state = State()
 

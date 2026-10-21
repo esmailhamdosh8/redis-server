@@ -29,7 +29,9 @@ def build_response(parts: list[bytearray], request_ms):
         response = globals()[command.decode()](args, request_ms)
 
     if command in state.propogate_to_slave_commands:
-        state.commands_to_propogate.append(build_command(parts))
+        full_command = build_command(parts)
+        state.sent_bytes += len(full_command)
+        state.commands_to_propogate.append(full_command)
     return response
 
 

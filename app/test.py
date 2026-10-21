@@ -4,17 +4,28 @@ a = b"+FULLRESYNC " + b"8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb"+ b" 0\r\n" + f
 
 print(len(b"+PONG\r\n"))
 
-        for watched_key, val in thread_state.watched_keys.items():
-            if val is not None:
-                for che in [state.cache, state.lists, state.streams]:
-                    if watched_key in che:
-                        if val != che[watched_key]:
-                            response = b"*-1\r\n"
-                        break
-                else:
-                    response = b"*-1\r\n"
-                if response == b"*-1\r\n": break
-            else:
-                if any(watched_key in che for che in [state.cache, state.lists, state.streams]):
-                    break
-        else:
+  GNU nano 8.3                                                         django.conf                                                          Modified  
+# Map the URL path /static/ to the physical directory on disk
+Alias /static/ /home/ec2-user/corey/django_project/static/
+
+<Directory /home/ec2-user/corey/django_project/static>
+    Require all granted
+</Directory>
+
+Alias /media/ /home/ec2-user/corey/django_project/media/
+
+<Directory /home/ec2-user/corey/django_project/media>
+    Require all granted
+</Directory>
+
+
+<Directory /home/ec2-user/corey/django_project/django_project>
+    <Files wsgi.py>
+        Require all granted
+    </Files>
+</Directory>
+
+
+WSGIScriptAlias / /home/ec2-user/corey/django_project/django_projects/wsgi.py
+WSGIDaemonProcess django_app python-path=/home/ec2-user/corey/django_project python-home=/home/ec2-user/corey/.env
+WSGIProcessGroup django_app

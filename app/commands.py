@@ -330,7 +330,9 @@ def EXEC(args: list[bytes], request_ms: float) -> bytes:
             for command, command_args, command_request_ms in thread_state.command_queue:
                 try:
                     if command in state.propogate_to_slave_commands:
-                        state.commands_to_propogate.append(build_command([command] + command_args))
+                        full_command = build_command([command] + command_args)
+                        state.sent_bytes += len(full_command)
+                        state.commands_to_propogate.append(full_command)
                     command_response = globals()[command.decode()](command_args, command_request_ms)
                     response += command_response
                 except Exception as e:
@@ -383,6 +385,10 @@ def INFO(args: list[bytes], request_ms: float) -> bytes:
 def REPLCONF(args: list[bytes], request_ms: float) -> bytes:
     if args[0] == b"GETACK":
         return f"*3\r\n$8\r\nREPLCONF\r\n$3\r\nACK\r\n${len(str(state.offset))}\r\n{state.offset}\r\n".encode()
+    if args[0] == b"ACK":
+        slave_offset = int(args[1])
+        state.slaves_offset[thread_state.slave_conn] = slave_offset    
+        return b""    
     slave_conn = thread_state.slave_conn
     index = -1
     for t_slave, _, _ in state.to_become_slave:
@@ -411,5 +417,20 @@ def PSYNC(args: list[bytes], request_ms: float) -> bytes:
 
 def WAIT(args: list[bytes], request_ms: float) -> bytes:
     num_replicas = int(args[0])
-    time_to_waint = int(args[1])
-    return f":{len(state.slaves)}\r\n".encode()
+    time_to_wait = int(args[1])
+    if state.sent_bytes == 0:
+        return f":{len(state.slaves)}\r\n".encode()
+    getack_command = b"*3\r\n$8\r\nREPLCONF\r\n$6\r\nGETACK\r\n$1\r\n*\r\n"
+    state.commands_to_propogate.append(getack_command)
+    deadline = int(time.time() * 1000) + time_to_wait
+    while True:
+        num = 0
+        for slave, _, _ in state.slaves:
+            if slave in state.slaves_offset and state.slaves_offset[slave] >= state.sent_bytes:
+                num += 1
+                if num >= num_replicas: break
+        else:
+            if int(time.time() * 1000) <= deadline: time.sleep(0.01); continue
+        break
+    state.sent_bytes += len(getack_command)
+    return f":{num}\r\n".encode()
