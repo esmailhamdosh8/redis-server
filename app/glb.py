@@ -22,6 +22,8 @@ class State:
         self.sent_bytes = 0
         self.slaves_offset = {}
 
+        self.RDB_KEYS = []
+
 
 state = State()
 

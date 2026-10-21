@@ -460,10 +460,10 @@ def read_bytes(file, first_byte):
             return b"-ERR Unsupported Number (6-bit) For 0x11\r\n"
     return file.read(bytes_to_read)
 
-def KEYS(args: list[bytes], request_ms: float) -> bytes:
-    if state.args.dir is None or state.args.dbfilename is None: return b"*0\r\n"
-    path = os.path.join(state.args.dir, state.args.dbfilename)
-    if not os.path.exists(path): return b"*0\r\n"
+def process_RDB(_dir, dbfilename, request_ms):
+    if _dir is None or dbfilename is None: return
+    path = os.path.join(_dir, dbfilename)
+    if not os.path.exists(path): return
     with open(path, 'rb') as file:
         magic_number = file.read(9)
         if magic_number != bytes.fromhex("524544495330303131"): return b"-ERR Invalid Magic Number\r\n"
@@ -481,14 +481,26 @@ def KEYS(args: list[bytes], request_ms: float) -> bytes:
                 break # we reach the end
             first_key = file.read(1)
             key = read_bytes(file, first_key)
-            print(key)
             if key.startswith(b"-ERR"): return key
             keys.append(key)
             first_val = file.read(1)
-            read_bytes(file, first_val)
+            val = read_bytes(file, first_val)
             next_byte = file.peek(1)[:1]
             if next_byte == bytes.fromhex('FC'):
-                file.read(9) # 1 + 8
+                file.read(1) # 1 + 8
+                expire_ms = int.from_bytes(file.read(8), byteorder='little')
+                state.cache[key] = [val, (request_ms, expire_ms - request_ms)]
             elif next_byte == bytes.fromhex('FD'):
-                file.read(5) # 1 + 4
+                file.read(1) # 1 + 4
+                expire_s = int.from_bytes(file.read(4), byteorder='little')
+                state.cache[key] = [val, (request_ms, expire_s * 1000 - request_ms)]
+            else:
+                state.cache[key] = [val, None]   
+        state.RDB_KEYS.extend(keys)
+
+def KEYS(args: list[bytes], request_ms: float) -> bytes:
+    if state.args.dir is None or state.args.dbfilename is None: return b"*0\r\n"
+    path = os.path.join(state.args.dir, state.args.dbfilename)
+    if not os.path.exists(path): return b"*0\r\n"
+    keys = state.RDB_KEYS
     return f"*{len(keys)}\r\n".encode() + b"\r\n".join(f"${len(key)}\r\n".encode() + key for key in keys) + b"\r\n"

@@ -134,6 +134,7 @@ def main():
     state.args = args
     port = args.port
     set_up_communication_with_master(args.replicaof, port)
+    process_RDB(args.dir, args.dbfilename, time.time() * 1000)
 
 
     server_socket = socket.create_server(('localhost', port), reuse_port=True)
