@@ -517,4 +517,7 @@ def pre_process():
         path = os.path.join(_dir, append_dir)
         os.makedirs(_dir, exist_ok=True)
         os.makedirs(path)
-    
+        append_file = (state.args.appendfilename if state.args.appendfilename else 'appendonly.aof') + ".1.incr.aof"
+        file_path = os.path.join(path, append_file)
+        with open(file_path, 'w') as file:
+            pass
