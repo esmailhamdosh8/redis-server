@@ -438,7 +438,14 @@ def WAIT(args: list[bytes], request_ms: float) -> bytes:
 
 def CONFIG(args: list[bytes], request_ms: float) -> bytes:
     if args[0] == b'GET':
-        argument = {b'dir': state.args.dir, b'dbfilename': state.args.dbfilename}.get(args[1])
+        argument = {
+            b'dir': state.args.dir if state.args.dir else os.getcwd(),
+            b'dbfilename': state.args.dbfilename,
+            b'appendonly': 'no',
+            b'appenddirname': 'appendonlydir',
+            b'appendfilename': 'appendonly.aof',
+            b'appendfsync': 'everysec'
+            }.get(args[1])
         if argument is None:
             return b"-ERR No Such Argument Exists\r\n"
         return f"*2\r\n${len(args[1])}\r\n".encode() + args[1] + f"\r\n${len(argument)}\r\n{argument}\r\n".encode()
