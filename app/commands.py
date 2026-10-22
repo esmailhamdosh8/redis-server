@@ -472,30 +472,27 @@ def process_RDB(_dir, dbfilename, request_ms):
             first_byte = file.read(1)
             if first_byte == bytes.fromhex('FE'): break
             read_bytes(file, first_byte)
-        file.read(4) # index + FB + 2 bytes
+        file.read(2) # index + FB
+        n = int.from_bytes(file.read(1))
+        file.read(1) # EXP keys
         keys = []
-        while True:
+        for _ in range(n):
+            next_byte = file.peek(1)[:1]
+            expire_ms = None
+            if next_byte == bytes.fromhex('FC'):
+                file.read(1) # 1 + 8
+                expire_ms = (request_ms, int.from_bytes(file.read(8), byteorder='little') - request_ms)
+            elif next_byte == bytes.fromhex('FD'):
+                file.read(1) # 1 + 4
+                expire_ms = (request_ms, int.from_bytes(file.read(4), byteorder='little') * 1000 - request_ms)
             typ = file.read(1) # type of val
-            if typ == bytes.fromhex("FF"): 
-                file.read(8) # checksum
-                break # we reach the end
             first_key = file.read(1)
             key = read_bytes(file, first_key)
             if key.startswith(b"-ERR"): return key
             keys.append(key)
             first_val = file.read(1)
             val = read_bytes(file, first_val)
-            next_byte = file.peek(1)[:1]
-            if next_byte == bytes.fromhex('FC'):
-                file.read(1) # 1 + 8
-                expire_ms = int.from_bytes(file.read(8), byteorder='little')
-                state.cache[key] = [val, (request_ms, expire_ms - request_ms)]
-            elif next_byte == bytes.fromhex('FD'):
-                file.read(1) # 1 + 4
-                expire_s = int.from_bytes(file.read(4), byteorder='little')
-                state.cache[key] = [val, (request_ms, expire_s * 1000 - request_ms)]
-            else:
-                state.cache[key] = [val, None]   
+            state.cache[key] = [val, expire_ms]
         state.RDB_KEYS.extend(keys)
 
 def KEYS(args: list[bytes], request_ms: float) -> bytes:
