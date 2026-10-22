@@ -441,10 +441,10 @@ def CONFIG(args: list[bytes], request_ms: float) -> bytes:
         argument = {
             b'dir': state.args.dir if state.args.dir else os.getcwd(),
             b'dbfilename': state.args.dbfilename,
-            b'appendonly': 'no',
-            b'appenddirname': 'appendonlydir',
-            b'appendfilename': 'appendonly.aof',
-            b'appendfsync': 'everysec'
+            b'appendonly': state.args.appendonly if state.args.appendonly else 'no',
+            b'appenddirname': state.args.appenddirname if state.args.appenddirname else 'appendonlydir',
+            b'appendfilename': state.args.appendfilename if state.args.appendfilename else 'appendonly.aof',
+            b'appendfsync': state.args.appendfsync if state.args.appendfsync else 'everysec'
             }.get(args[1])
         if argument is None:
             return b"-ERR No Such Argument Exists\r\n"

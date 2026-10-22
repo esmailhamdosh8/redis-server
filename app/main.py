@@ -130,6 +130,11 @@ def main():
     parser.add_argument('--replicaof', type=str)
     parser.add_argument('--dir', type=str)
     parser.add_argument('--dbfilename', type=str)
+    parser.add_argument('--appendonly', type=str)
+    parser.add_argument('--appenddirname', type=str)
+    parser.add_argument('--appendfilename', type=str)
+    parser.add_argument('--appendfsync', type=str)
+
     args = parser.parse_args()
     state.args = args
     port = args.port
