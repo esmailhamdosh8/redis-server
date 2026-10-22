@@ -508,3 +508,13 @@ def KEYS(args: list[bytes], request_ms: float) -> bytes:
     if not os.path.exists(path): return b"*0\r\n"
     keys = state.RDB_KEYS
     return f"*{len(keys)}\r\n".encode() + b"\r\n".join(f"${len(key)}\r\n".encode() + key for key in keys) + b"\r\n"
+
+def pre_process():
+    append_only = state.args.appendonly
+    if append_only == 'yes':
+        _dir =  state.args.dir if state.args.dir else os.getcwd()
+        append_dir = state.args.appenddirname if state.args.appenddirname else 'appendonlydir'
+        path = os.path.join(_dir, append_dir)
+        os.makedirs(_dir, exist_ok=True)
+        os.makedirs(path)
+    
