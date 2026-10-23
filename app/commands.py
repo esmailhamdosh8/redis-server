@@ -330,7 +330,8 @@ def EXEC(args: list[bytes], request_ms: float) -> bytes:
             response = f"*{len(thread_state.command_queue)}\r\n".encode()
             for command, command_args, command_request_ms in thread_state.command_queue:
                 try:
-                    if command in state.propogate_to_slave_commands:
+                    if command in state.write_commands:
+                        flush_to_disk([command] + command_args)
                         full_command = build_command([command] + command_args)
                         state.sent_bytes += len(full_command)
                         state.commands_to_propogate.append(full_command)
@@ -439,12 +440,12 @@ def WAIT(args: list[bytes], request_ms: float) -> bytes:
 def CONFIG(args: list[bytes], request_ms: float) -> bytes:
     if args[0] == b'GET':
         argument = {
-            b'dir': state.args.dir if state.args.dir else os.getcwd(),
+            b'dir': state.args.dir,
             b'dbfilename': state.args.dbfilename,
-            b'appendonly': state.args.appendonly if state.args.appendonly else 'no',
-            b'appenddirname': state.args.appenddirname if state.args.appenddirname else 'appendonlydir',
-            b'appendfilename': state.args.appendfilename if state.args.appendfilename else 'appendonly.aof',
-            b'appendfsync': state.args.appendfsync if state.args.appendfsync else 'everysec'
+            b'appendonly': state.args.appendonly,
+            b'appenddirname': state.args.appenddirname,
+            b'appendfilename': state.args.appendfilename,
+            b'appendfsync': state.args.appendfsync
             }.get(args[1])
         if argument is None:
             return b"-ERR No Such Argument Exists\r\n"
@@ -510,14 +511,23 @@ def KEYS(args: list[bytes], request_ms: float) -> bytes:
     return f"*{len(keys)}\r\n".encode() + b"\r\n".join(f"${len(key)}\r\n".encode() + key for key in keys) + b"\r\n"
 
 def pre_process():
-    append_only = state.args.appendonly
-    if append_only == 'yes':
-        _dir =  state.args.dir if state.args.dir else os.getcwd()
-        append_dir = state.args.appenddirname if state.args.appenddirname else 'appendonlydir'
+    if state.args.dir is None:
+        state.args.dir = os.getcwd()
+    if state.args.appendonly is None:
+        state.args.appendonly = 'no'
+    if state.args.appenddirname is None:
+        state.args.appenddirname = 'appendonlydir'    
+    if state.args.appendfilename is None:
+        state.args.appendfilename = 'appendonly.aof'    
+    if state.args.appendfsync is None:
+        state.args.appendfsync = 'everysec'    
+    if state.args.appendonly == 'yes':
+        _dir =  state.args.dir
+        append_dir = state.args.appenddirname
         path = os.path.join(_dir, append_dir)
         os.makedirs(_dir, exist_ok=True)
         os.makedirs(path)
-        filename = state.args.appendfilename if state.args.appendfilename else 'appendonly.aof'
+        filename = state.args.appendfilename
         append_file = filename + ".1.incr.aof"
         file_path = os.path.join(path, append_file)
         with open(file_path, 'w'):
@@ -526,4 +536,13 @@ def pre_process():
         with open(manifest_file, 'w') as file:
             file.write(f"file {append_file} seq 1 type i")
 
+def flush_to_disk(args):
+    if state.args.appendonly == 'yes':
+        command = build_command(args)
+        manifest_file = os.path.join(state.args.dir, state.args.appenddirname, state.args.appendfilename + ".manifest")
+        with open(manifest_file, 'r') as m_file:
+            line = m_file.readline()
+            append_file = os.path.join(state.args.dir, state.args.appenddirname, line.split(' ')[1])
+            with open(append_file, 'ab') as a_file:
+                a_file.write(command)
         

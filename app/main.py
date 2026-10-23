@@ -28,7 +28,8 @@ def build_response(parts: list[bytearray], request_ms):
     else:
         response = globals()[command.decode()](args, request_ms)
 
-    if command in state.propogate_to_slave_commands:
+    if command in state.write_commands:
+        flush_to_disk(parts)
         full_command = build_command(parts)
         state.sent_bytes += len(full_command)
         state.commands_to_propogate.append(full_command)
@@ -138,9 +139,9 @@ def main():
     args = parser.parse_args()
     state.args = args
     port = args.port
+    pre_process()
     set_up_communication_with_master(args.replicaof, port)
     process_RDB(args.dir, args.dbfilename, time.time() * 1000)
-    pre_process()
 
 
     server_socket = socket.create_server(('localhost', port), reuse_port=True)
