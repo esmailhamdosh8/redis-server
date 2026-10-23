@@ -35,6 +35,59 @@ def build_response(parts: list[bytearray], request_ms):
         state.commands_to_propogate.append(full_command)
     return response
 
+def is_byte_digit(num):
+    return num >= 48 and num <= 57
+
+def parser(conn, buf):
+    request = []
+    star = 0
+    chunk = buf
+    while True:
+        i = 0
+        n = len(chunk)
+        while i < n:
+            if chunk[i] == 42:
+                i += 1
+            elif is_byte_digit(chunk[i]):
+                star = star * 10 + chunk[i] - 48
+                i += 1
+            else:
+                if len(chunk) - 1 - i > 1:
+                    chunk = chunk[i + 2:]
+                else:
+                    chunk = conn.recv(1024)
+                break
+        else:
+            chunk = conn.recv(1024)
+            continue
+        break
+    for _ in range(star):
+        amp = 0
+        while True:
+            i = 0
+            n = len(chunk)
+            while i < n:
+                if chunk[i] == 36:
+                    i += 1
+                elif is_byte_digit(chunk[i]):
+                    amp = amp * 10 + chunk[i] - 48
+                    i += 1
+                else:
+                    if len(chunk) - 1 - i > 1:
+                        chunk = chunk[i + 2:]
+                    else:
+                        chunk = conn.recv(1024)
+                    break
+            else:
+                chunk = conn.recv(1024)
+                continue
+            break
+        while len(chunk) < amp + 2:
+            chunk += conn.recv(1024)
+        request.append(chunk[:amp])
+        chunk = chunk[amp + 2:]
+    return request, chunk
+
 
 def respond(typ, conn, response, current_request):
     if typ == 2:
@@ -50,51 +103,16 @@ def handle_client(conn, respond_type):
     thread_state.watched_keys = {}
     thread_state.slave_conn = conn
     thread_state.type = respond_type
-
-    buf = bytearray()
-    current_request = []
-    request_ms = None
-    cnt_of_args = 0
     try:
+        buf = b""
         while True:
-            chunk = conn.recv(1024)
-            if not chunk: 
-                if not current_request: return
-                raise ValueError
-            buf += chunk
-            parts = buf.split(b"\r\n")
-            n = len(parts)
-            find_len = True
-            for i in range(n - 1):
-                if cnt_of_args == 0:
-                    if not parts[i].startswith(b"*"): raise ValueError
-                    if current_request:
-                        response = build_response(current_request, request_ms)
-                        if thread_state.type == 0:
-                                command = build_command(current_request)
-                                state.offset += len(command)
-                        respond(thread_state.type, conn, response, current_request)
-                    current_request = []
-                    cnt_of_args = int(parts[i][1:])
-                    request_ms = time.time() * 1000
-                else:
-                    if find_len:
-                        if not parts[i].startswith(b"$"): raise ValueError
-                        len_of_arg = int(parts[i][1:])
-                    else:
-                        if len(parts[i]) != len_of_arg: raise ValueError
-                        current_request.append(parts[i])
-                        cnt_of_args -= 1
-                    find_len = not find_len
-            if (not parts[-1] or parts[-1].startswith(b"*")) and cnt_of_args == 0:
-                if current_request:
-                    response = build_response(current_request, request_ms)
-                    if thread_state.type == 0:
-                        command = build_command(current_request)
-                        state.offset += len(command)
-                    respond(thread_state.type, conn, response, current_request)
-                current_request = []
-            buf = parts[-1]
+            request, buf = parser(conn, buf)
+            if request:
+                response = build_response(request, time.time() * 1000)
+                if thread_state.type == 0:
+                    command = build_command(request)
+                    state.offset += len(command)
+                respond(thread_state.type, conn, response, request)
     finally:
         conn.close()
 
