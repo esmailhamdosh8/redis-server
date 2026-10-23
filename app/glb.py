@@ -14,10 +14,11 @@ class State:
         self.offset = 0
         self.slaves = []
 
-        self.commands_to_propogate = deque()
-        self.specific_to_propotgate = deque()
         self.to_become_slave = deque()
+
         self.write_commands = (b'SET', b'RPUSH', b'LPUSH', b'LPOP', b'BLPOP', b'XADD', b'INCR')
+        self.multi_commands = (b'EXEC', b'DISCARD', b'WATCH', b'MULTI')
+        self.slave_commands = deque()
 
         self.sent_bytes = 0
         self.slaves_offset = {}

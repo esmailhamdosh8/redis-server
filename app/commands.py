@@ -6,6 +6,24 @@ import threading
 import bisect
 import os
 
+from .main import parser
+
+def build_response(parts: list[bytearray], request_ms: float) -> bytes:
+    parts = [bytes(part) for part in parts]
+    command, *args = parts
+    if thread_state.in_multi and command not in state.multi_commands:
+        thread_state.command_queue.append((parts, request_ms))
+        return b"+QUEUED\r\n"
+    else:
+        response = globals()[command.decode()](args, request_ms)
+
+    if command in state.write_commands:
+        flush_to_disk(parts)
+        full_command = build_command(parts)
+        state.sent_bytes += len(full_command)
+        for slave_conn, _, _ in state.slaves:
+            state.slave_commands.append((slave_conn, full_command))
+    return response
 
 def build_command(parts):
     return f"*{len(parts)}\r\n".encode() + b"\r\n".join(f"${len(part)}\r\n".encode() + part for part in parts) + b"\r\n"
@@ -312,6 +330,7 @@ def MULTI(args: list[bytes], request_ms: float) -> bytes:
 def EXEC(args: list[bytes], request_ms: float) -> bytes:
     response = b"-ERR EXEC without MULTI\r\n"
     if thread_state.in_multi:
+        thread_state.in_multi = False
         for watched_key, val in thread_state.watched_keys.items():
             if val is not None:
                 for che in [state.cache, state.lists, state.streams]:
@@ -328,18 +347,8 @@ def EXEC(args: list[bytes], request_ms: float) -> bytes:
                     break
         else:
             response = f"*{len(thread_state.command_queue)}\r\n".encode()
-            for command, command_args, command_request_ms in thread_state.command_queue:
-                try:
-                    if command in state.write_commands:
-                        flush_to_disk([command] + command_args)
-                        full_command = build_command([command] + command_args)
-                        state.sent_bytes += len(full_command)
-                        state.commands_to_propogate.append(full_command)
-                    command_response = globals()[command.decode()](command_args, command_request_ms)
-                    response += command_response
-                except Exception as e:
-                    response += b"-ERR " + str(e).encode() + b"\r\n"
-    thread_state.in_multi = False
+            for command_args, command_request_ms in thread_state.command_queue:
+                response += build_response(command_args, command_request_ms)
     thread_state.command_queue = []
     thread_state.watched_keys = {}
     return response
@@ -411,7 +420,7 @@ def PSYNC(args: list[bytes], request_ms: float) -> bytes:
     replication_id = args[0]
     replication_offset = args[1]
     empty_body = bytes.fromhex("524544495330303131fa0972656469732d76657205372e322e30fa0a72656469732d62697473c040fa056374696d65c26d08bc65fa08757365642d6d656dc2b0c41000fa08616f662d62617365c000fff06e3bfec0ff5aa2")
-    thread_state.type = 1
+    thread_state.type = 'slave'
     thread_state.slave_conn.sendall(b"+FULLRESYNC " + state.replication_id.encode() + b" 0\r\n" + f"${len(empty_body)}\r\n".encode() + empty_body)
     while state.to_become_slave:
         state.slaves.append(state.to_become_slave.popleft())
@@ -423,7 +432,8 @@ def WAIT(args: list[bytes], request_ms: float) -> bytes:
     if state.sent_bytes == 0:
         return f":{len(state.slaves)}\r\n".encode()
     getack_command = b"*3\r\n$8\r\nREPLCONF\r\n$6\r\nGETACK\r\n$1\r\n*\r\n"
-    state.commands_to_propogate.append(getack_command)
+    for slave_conn, _, _ in state.slaves:
+        state.slave_commands.append((slave_conn, getack_command))
     deadline = int(time.time() * 1000) + time_to_wait
     while True:
         num = 0
@@ -468,8 +478,11 @@ def read_bytes(file, first_byte):
             return b"-ERR Unsupported Number (6-bit) For 0x11\r\n"
     return file.read(bytes_to_read)
 
-def process_RDB(_dir, dbfilename, request_ms):
-    if _dir is None or dbfilename is None: return
+def process_RDB():
+    if state.args.dbfilename is None: return
+    _dir = state.args.dir
+    dbfilename = state.args.dbfilename
+    request_ms = time.time() * 1000
     path = os.path.join(_dir, dbfilename)
     if not os.path.exists(path): return
     with open(path, 'rb') as file:
@@ -510,31 +523,54 @@ def KEYS(args: list[bytes], request_ms: float) -> bytes:
     keys = state.RDB_KEYS
     return f"*{len(keys)}\r\n".encode() + b"\r\n".join(f"${len(key)}\r\n".encode() + key for key in keys) + b"\r\n"
 
+class Conn:
+    def __init__(self, binary):
+        self.binary = binary
+
+    def recv(self, n):
+        if n > len(self.binary):
+            ret = self.binary
+            self.binary = b""
+        else:
+            ret = self.binary[:n]
+            self.binary = self.binary[n:]
+        return ret
+
+    def is_empty(self):
+
+        return len(self.binary) == 0
+
 def pre_process():
-    if state.args.dir is None:
-        state.args.dir = os.getcwd()
-    if state.args.appendonly is None:
-        state.args.appendonly = 'no'
-    if state.args.appenddirname is None:
-        state.args.appenddirname = 'appendonlydir'    
-    if state.args.appendfilename is None:
-        state.args.appendfilename = 'appendonly.aof'    
-    if state.args.appendfsync is None:
-        state.args.appendfsync = 'everysec'    
     if state.args.appendonly == 'yes':
         _dir =  state.args.dir
         append_dir = state.args.appenddirname
-        path = os.path.join(_dir, append_dir)
-        os.makedirs(_dir, exist_ok=True)
-        os.makedirs(path)
         filename = state.args.appendfilename
-        append_file = filename + ".1.incr.aof"
-        file_path = os.path.join(path, append_file)
-        with open(file_path, 'w'):
-            pass
+        path = os.path.join(_dir, append_dir)
         manifest_file = os.path.join(path, filename + ".manifest")
-        with open(manifest_file, 'w') as file:
-            file.write(f"file {append_file} seq 1 type i")
+        if os.path.exists(path):
+            with open(manifest_file, 'r') as m_file:
+                line = m_file.readline()
+                append_file = os.path.join(path, line.split(' ')[1])
+                with open(append_file, 'rb') as a_file:
+                    conn_obj = Conn(a_file.read())
+            buf = b""
+            while not conn_obj.is_empty():
+                request, buf = parser(conn_obj, buf)
+                if request:
+                    build_response(request, time.time() * 1000)
+            if buf:
+                request, _ = parser(conn_obj, buf)
+                if request:
+                    build_response(request, time.time() * 1000)
+
+        else:
+            os.makedirs(path, exist_ok=True)
+            append_file = filename + ".1.incr.aof"
+            file_path = os.path.join(path, append_file)
+            with open(file_path, 'w'):
+                pass
+            with open(manifest_file, 'w') as file:
+                file.write(f"file {append_file} seq 1 type i")
 
 def flush_to_disk(args):
     if state.args.appendonly == 'yes':
@@ -545,4 +581,5 @@ def flush_to_disk(args):
             append_file = os.path.join(state.args.dir, state.args.appenddirname, line.split(' ')[1])
             with open(append_file, 'ab') as a_file:
                 a_file.write(command)
-        
+                a_file.flush()
+                os.fsync(a_file.fileno())
