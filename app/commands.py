@@ -517,7 +517,13 @@ def pre_process():
         path = os.path.join(_dir, append_dir)
         os.makedirs(_dir, exist_ok=True)
         os.makedirs(path)
-        append_file = (state.args.appendfilename if state.args.appendfilename else 'appendonly.aof') + ".1.incr.aof"
+        filename = state.args.appendfilename if state.args.appendfilename else 'appendonly.aof'
+        append_file = filename + ".1.incr.aof"
         file_path = os.path.join(path, append_file)
-        with open(file_path, 'w') as file:
+        with open(file_path, 'w'):
             pass
+        manifest_file = os.path.join(path, filename + ".manifest")
+        with open(manifest_file, 'w') as file:
+            file.write(f"file {append_file} seq 1 type i")
+
+        
