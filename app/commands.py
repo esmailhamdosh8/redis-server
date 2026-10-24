@@ -31,7 +31,9 @@ def build_command(parts):
     return f"*{len(parts)}\r\n".encode() + b"\r\n".join(f"${len(part)}\r\n".encode() + part for part in parts) + b"\r\n"
 
 def PING(args: list[bytes], request_ms: float) -> bytes:
-    return b"+PONG\r\n"
+    if len(thread_state.channels) == 0:
+        return b"+PONG\r\n"
+    return b"*2\r\n$4\r\npong\r\n$0\r\n\r\n"
 
 def ECHO(args: list[bytes], request_ms: float) -> bytes:
     return f"${len(args[0])}\r\n".encode() + args[0] + b"\r\n"
