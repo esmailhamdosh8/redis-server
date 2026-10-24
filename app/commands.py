@@ -581,4 +581,6 @@ def flush_to_disk(args):
                 os.fsync(a_file.fileno())
 
 def SUBSCRIBE(args: list[bytes], request_ms: float) -> bytes:
-    return f"*3\r\n$9\r\nsubscribe\r\n${len(args[0])}\r\n".encode() + args[0] + b"\r\n:1\r\n"
+    channel = args[0]
+    thread_state.channels.add(channel)
+    return f"*3\r\n$9\r\nsubscribe\r\n${len(args[0])}\r\n".encode() + args[0] + f"\r\n:{len(thread_state.channels)}\r\n".encode()

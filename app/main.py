@@ -75,6 +75,7 @@ def handle_client(conn, respond_type):
     thread_state.watched_keys = {}
     thread_state.slave_conn = conn
     thread_state.respond_to = respond_type
+    thread_state.channels = set()
     try:
         buf = b""
         while True:
