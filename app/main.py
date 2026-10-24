@@ -33,7 +33,7 @@ def parser(conn, buf: bytes) -> tuple[list[bytes], bytes]:
                     chunk = chunk[i + 2:]
                 else:
                     if len(chunk) - 1 == i:
-                        conn.recv(1)
+                        conn.recv(1, socket.MSG_WAITALL)
                     chunk = conn.recv(1024)
                 break
         else:
@@ -56,7 +56,7 @@ def parser(conn, buf: bytes) -> tuple[list[bytes], bytes]:
                         chunk = chunk[i + 2:]
                     else:
                         if len(chunk) - 1 == i:
-                            conn.recv(1)
+                            conn.recv(1, socket.MSG_WAITALL)
                         chunk = conn.recv(1024)
                     break
             else:

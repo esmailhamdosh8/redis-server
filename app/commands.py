@@ -527,8 +527,9 @@ class Conn:
     def __init__(self, binary):
         self.binary = binary
 
-    def recv(self, n):
+    def recv(self, n, MSG_WAITALL=None):
         if n > len(self.binary):
+            if MSG_WAITALL: raise ValueError("Parse Error")
             ret = self.binary
             self.binary = b""
         else:
@@ -537,7 +538,6 @@ class Conn:
         return ret
 
     def is_empty(self):
-
         return len(self.binary) == 0
 
 def pre_process():
@@ -554,12 +554,8 @@ def pre_process():
                 with open(append_file, 'rb') as a_file:
                     conn_obj = Conn(a_file.read())
             buf = b""
-            while not conn_obj.is_empty():
+            while not conn_obj.is_empty() or buf != b"":
                 request, buf = parser(conn_obj, buf)
-                if request:
-                    build_response(request, time.time() * 1000)
-            if buf:
-                request, _ = parser(conn_obj, buf)
                 if request:
                     build_response(request, time.time() * 1000)
 
