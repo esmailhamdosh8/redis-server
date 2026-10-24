@@ -135,6 +135,7 @@ def main():
 
     state.args = parser.parse_args()
     thread_state.in_multi = False
+    thread_state.channels = set()
     process_RDB()
     pre_process()
     set_up_communication_with_master()

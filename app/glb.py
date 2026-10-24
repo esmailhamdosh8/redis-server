@@ -19,6 +19,7 @@ class State:
         self.write_commands = (b'SET', b'RPUSH', b'LPUSH', b'LPOP', b'BLPOP', b'XADD', b'INCR')
         self.multi_commands = (b'EXEC', b'DISCARD', b'WATCH', b'MULTI')
         self.slave_commands = deque()
+        self.subsc_commands = (b'SUBSCRIBE', b'UNSUBSCRIBE', b'PING', b'QUIT', b'RESET')
 
         self.sent_bytes = 0
         self.slaves_offset = {}

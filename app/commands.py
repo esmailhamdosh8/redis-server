@@ -11,7 +11,9 @@ from .main import parser
 def build_response(parts: list[bytearray], request_ms: float) -> bytes:
     parts = [bytes(part) for part in parts]
     command, *args = parts
-    if thread_state.in_multi and command not in state.multi_commands:
+    if len(thread_state.channels) >= 1 and command not in state.subsc_commands:
+        return f"-ERR Can't execute '{command.decode()}': only (P|S)SUBSCRIBE / (P|S)UNSUBSCRIBE / PING / QUIT / RESET are allowed in this context\r\n".encode()
+    elif thread_state.in_multi and command not in state.multi_commands:
         thread_state.command_queue.append((parts, request_ms))
         return b"+QUEUED\r\n"
     else:
