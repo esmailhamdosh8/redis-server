@@ -627,4 +627,4 @@ def ZADD(args: list[bytes], request_ms: float) -> bytes:
     sorted_set = state.sorted[sorted_set]
     score = float(score.decode('utf-8'))
     sorted_set.add(value, score)
-    return f":{len(sorted_set)}\r\n".encode()
+    return f":1\r\n".encode()
