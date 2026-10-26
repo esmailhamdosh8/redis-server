@@ -612,10 +612,13 @@ class ZSET():
         self.ordered = SortedSet()
 
     def add(self, value, score):
+        ans = 1
         if value in self.scores:
+            ans = 0
             self.ordered.discard((score, value))
         self.scores[value] = score
         self.ordered.add((score, value))
+        return ans
 
     def __len__(self):
         return len(self.ordered)
@@ -626,5 +629,5 @@ def ZADD(args: list[bytes], request_ms: float) -> bytes:
         state.sorted[sorted_set] = ZSET()
     sorted_set = state.sorted[sorted_set]
     score = float(score.decode('utf-8'))
-    sorted_set.add(value, score)
-    return f":1\r\n".encode()
+    ans = sorted_set.add(value, score)
+    return f":{ans}\r\n".encode()
