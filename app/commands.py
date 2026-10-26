@@ -598,3 +598,8 @@ def PUBLISH(args: list[bytes], request_ms: float) -> bytes:
             ans += 1
             conn.sendall(f"*3\r\n$7\r\nmessage\r\n${len(connection)}\r\n".encode() + connection + f"\r\n${len(message)}\r\n".encode() + message + b"\r\n")
     return f":{ans}\r\n".encode()
+
+def UNSUBSCRIBE(args: list[bytes], request_ms: float) -> bytes:
+    channel = args[0]
+    state.channels[thread_state.slave_conn].discard(channel)
+    return f"*3\r\n$11\r\nunsubscribe\r\n${len(args[0])}\r\n".encode() + args[0] + f"\r\n:{len(state.channels[thread_state.slave_conn])}\r\n".encode()
