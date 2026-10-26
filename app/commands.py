@@ -1,5 +1,6 @@
 from .glb import *
 from collections import deque
+from sortedcontainers import SortedSet
 import time
 import math
 import threading
@@ -603,3 +604,27 @@ def UNSUBSCRIBE(args: list[bytes], request_ms: float) -> bytes:
     channel = args[0]
     state.channels[thread_state.slave_conn].discard(channel)
     return f"*3\r\n$11\r\nunsubscribe\r\n${len(args[0])}\r\n".encode() + args[0] + f"\r\n:{len(state.channels[thread_state.slave_conn])}\r\n".encode()
+
+
+class ZSET():
+    def __init__(self):
+        self.scores = {}
+        self.ordered = SortedSet()
+
+    def add(self, value, score):
+        if value in self.scores:
+            self.ordered.discard((score, value))
+        self.scores[value] = score
+        self.ordered.add((score, value))
+
+    def __len__(self):
+        return len(self.ordered)
+
+def ZADD(args: list[bytes], request_ms: float) -> bytes:
+    sorted_set, score, value = args[:3]
+    if sorted_set not in state.sorted:
+        state.sorted[sorted_set] = ZSET()
+    sorted_set = state.sorted[sorted_set]
+    score = float(score.decode('utf-8'))
+    sorted_set.add(value, score)
+    return f":{len(sorted_set)}\r\n".encode()
