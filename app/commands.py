@@ -591,7 +591,10 @@ def SUBSCRIBE(args: list[bytes], request_ms: float) -> bytes:
 
 def PUBLISH(args: list[bytes], request_ms: float) -> bytes:
     connection = args[0]
+    message = args[1]
     ans = 0
-    for channel in state.channels.values():
-        ans += int(connection in channel)
+    for conn, channel in state.channels.items():
+        if connection in channel:
+            ans += 1
+            conn.sendall(f"*3\r\n$7\r\nmessage\r\n${len(connection)}\r\n".encode() + connection + f"\r\n${len(message)}\r\n".encode() + message + b"\r\n")
     return f":{ans}\r\n".encode()
