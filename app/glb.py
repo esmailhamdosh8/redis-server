@@ -26,6 +26,8 @@ class State:
 
         self.RDB_KEYS = []
 
+        self.channels = {}
+
 
 state = State()
 

@@ -75,7 +75,8 @@ def handle_client(conn, respond_type):
     thread_state.watched_keys = {}
     thread_state.slave_conn = conn
     thread_state.respond_to = respond_type
-    thread_state.channels = set()
+    # thread_state.channels = set()
+    state.channels[conn] = set()
     try:
         buf = b""
         while True:
@@ -93,6 +94,7 @@ def handle_client(conn, respond_type):
                 elif thread_state.respond_to == 'slave':
                     state.slave_commands.append((conn, response))
     finally:
+        del state.channels[conn]
         conn.close()
 
 def set_up_communication_with_master():
@@ -135,7 +137,8 @@ def main():
 
     state.args = parser.parse_args()
     thread_state.in_multi = False
-    thread_state.channels = set()
+    thread_state.slave_conn = None
+    state.channels[thread_state.slave_conn] = set()
     process_RDB()
     pre_process()
     set_up_communication_with_master()

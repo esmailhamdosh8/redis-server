@@ -11,7 +11,7 @@ from .main import parser
 def build_response(parts: list[bytearray], request_ms: float) -> bytes:
     parts = [bytes(part) for part in parts]
     command, *args = parts
-    if len(thread_state.channels) >= 1 and command not in state.subsc_commands:
+    if len(state.channels[thread_state.slave_conn]) >= 1 and command not in state.subsc_commands:
         return f"-ERR Can't execute '{command.decode()}': only (P|S)SUBSCRIBE / (P|S)UNSUBSCRIBE / PING / QUIT / RESET are allowed in this context\r\n".encode()
     elif thread_state.in_multi and command not in state.multi_commands:
         thread_state.command_queue.append((parts, request_ms))
@@ -31,7 +31,7 @@ def build_command(parts):
     return f"*{len(parts)}\r\n".encode() + b"\r\n".join(f"${len(part)}\r\n".encode() + part for part in parts) + b"\r\n"
 
 def PING(args: list[bytes], request_ms: float) -> bytes:
-    if len(thread_state.channels) == 0:
+    if len(state.channels[thread_state.slave_conn]) == 0:
         return b"+PONG\r\n"
     return b"*2\r\n$4\r\npong\r\n$0\r\n\r\n"
 
@@ -586,5 +586,12 @@ def flush_to_disk(args):
 
 def SUBSCRIBE(args: list[bytes], request_ms: float) -> bytes:
     channel = args[0]
-    thread_state.channels.add(channel)
-    return f"*3\r\n$9\r\nsubscribe\r\n${len(args[0])}\r\n".encode() + args[0] + f"\r\n:{len(thread_state.channels)}\r\n".encode()
+    state.channels[thread_state.slave_conn].add(channel)
+    return f"*3\r\n$9\r\nsubscribe\r\n${len(args[0])}\r\n".encode() + args[0] + f"\r\n:{len(state.channels[thread_state.slave_conn])}\r\n".encode()
+
+def PUBLISH(args: list[bytes], request_ms: float) -> bytes:
+    connection = args[0]
+    ans = 0
+    for channel in state.channels.values():
+        ans += int(connection in channel)
+    return f":{ans}\r\n".encode()
