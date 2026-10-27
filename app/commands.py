@@ -614,7 +614,7 @@ class ZSET():
         ans = 1
         if value in self.scores:
             ans = 0
-            self.ordered.discard((score, value))
+            self.ordered.discard((self.scores[value], value))
         self.scores[value] = score
         self.ordered.add((score, value))
         return ans
@@ -668,3 +668,9 @@ def ZRANGE(args: list[bytes], request_ms: float) -> bytes:
         _, value = sorted_set[i]
         response += f"${len(value)}\r\n".encode() + value + b"\r\n"
     return response
+
+def ZCARD(args: list[bytes], request_ms: float) -> bytes:
+    sorted_set = args[0]
+    if sorted_set not in state.sorted: return b":0\r\n"
+    sorted_set = state.sorted[sorted_set]
+    return f":{len(sorted_set)}\r\n".encode()
