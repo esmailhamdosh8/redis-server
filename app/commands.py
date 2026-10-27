@@ -632,6 +632,9 @@ class ZSET():
     def __getitem__(self, i):
         return self.ordered[i]
 
+    def get_score(self, value):
+        return self.scores[value]
+
 def ZADD(args: list[bytes], request_ms: float) -> bytes:
     sorted_set, score, value = args[:3]
     if sorted_set not in state.sorted:
@@ -674,3 +677,11 @@ def ZCARD(args: list[bytes], request_ms: float) -> bytes:
     if sorted_set not in state.sorted: return b":0\r\n"
     sorted_set = state.sorted[sorted_set]
     return f":{len(sorted_set)}\r\n".encode()
+
+def ZSCORE(args: list[bytes], request_ms: float) -> bytes:
+    sorted_set, value = args[:2]
+    if sorted_set not in state.sorted: return b"$-1\r\n"
+    sorted_set = state.sorted[sorted_set]
+    if value not in sorted_set: return b"$-1\r\n"
+    num = sorted_set.get_score(value)
+    return f"${len(str(num))}\r\n{num}\r\n".encode()
