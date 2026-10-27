@@ -605,7 +605,6 @@ def UNSUBSCRIBE(args: list[bytes], request_ms: float) -> bytes:
     state.channels[thread_state.slave_conn].discard(channel)
     return f"*3\r\n$11\r\nunsubscribe\r\n${len(args[0])}\r\n".encode() + args[0] + f"\r\n:{len(state.channels[thread_state.slave_conn])}\r\n".encode()
 
-
 class ZSET():
     def __init__(self):
         self.scores = {}
@@ -651,11 +650,18 @@ def ZRANK(args: list[bytes], request_ms: float) -> bytes:
 
 def ZRANGE(args: list[bytes], request_ms: float) -> bytes:
     sorted_set, start, end = args[:3]
-    start, end = int.from_bytes(start) - 48, int.from_bytes(end) - 48
-    if (sorted_set not in state.sorted) or start > end: return b"*0\r\n"
+    start, end = int(start), int(end)
+    if (sorted_set not in state.sorted): return b"*0\r\n"
     sorted_set = state.sorted[sorted_set]
-    if start >= len(sorted_set): return b"*0\r\n"
-    end = min(end, len(sorted_set) - 1)
+    n = len(sorted_set)
+    if start >= n: return b"*0\r\n"
+    def helper(x):
+            if x >= n: return n - 1
+            if x >= 0: return x
+            if -x > n: return 0
+            return x + n
+    start, end = helper(start), helper(end)
+    if start > end: return b"*0\r\n"
     size = end - start + 1
     response = f"*{size}\r\n".encode()
     for i in range(start, end + 1):
