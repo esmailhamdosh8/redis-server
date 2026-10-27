@@ -623,6 +623,13 @@ class ZSET():
     def __len__(self):
         return len(self.ordered)
 
+    def __contains__(self, item):
+        return item in self.scores
+
+    def index(self, value):
+        score = self.scores[value]
+        return self.ordered.index((score, value))
+
 def ZADD(args: list[bytes], request_ms: float) -> bytes:
     sorted_set, score, value = args[:3]
     if sorted_set not in state.sorted:
@@ -631,3 +638,10 @@ def ZADD(args: list[bytes], request_ms: float) -> bytes:
     score = float(score.decode('utf-8'))
     ans = sorted_set.add(value, score)
     return f":{ans}\r\n".encode()
+
+def ZRANK(args: list[bytes], request_ms: float) -> bytes:
+    sorted_set, value = args[:2]
+    if sorted_set not in state.sorted: return b"$-1\r\n"
+    sorted_set = state.sorted[sorted_set]
+    if value not in sorted_set: return b"$-1\r\n"
+    return f":{sorted_set.index(value)}\r\n".encode()
