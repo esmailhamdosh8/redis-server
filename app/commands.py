@@ -630,6 +630,9 @@ class ZSET():
         score = self.scores[value]
         return self.ordered.index((score, value))
 
+    def __getitem__(self, i):
+        return self.ordered[i]
+
 def ZADD(args: list[bytes], request_ms: float) -> bytes:
     sorted_set, score, value = args[:3]
     if sorted_set not in state.sorted:
@@ -645,3 +648,17 @@ def ZRANK(args: list[bytes], request_ms: float) -> bytes:
     sorted_set = state.sorted[sorted_set]
     if value not in sorted_set: return b"$-1\r\n"
     return f":{sorted_set.index(value)}\r\n".encode()
+
+def ZRANGE(args: list[bytes], request_ms: float) -> bytes:
+    sorted_set, start, end = args[:3]
+    start, end = int.from_bytes(start) - 48, int.from_bytes(end) - 48
+    if (sorted_set not in state.sorted) or start > end: return b"*0\r\n"
+    sorted_set = state.sorted[sorted_set]
+    if start >= len(sorted_set): return b"*0\r\n"
+    end = min(end, len(sorted_set) - 1)
+    size = end - start + 1
+    response = f"*{size}\r\n".encode()
+    for i in range(start, end + 1):
+        _, value = sorted_set[i]
+        response += f"${len(value)}\r\n".encode() + value + b"\r\n"
+    return response
