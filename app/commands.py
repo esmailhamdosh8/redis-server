@@ -54,13 +54,16 @@ def SET(args: list[bytes], request_ms: float) -> bytes:
 
 def GET(args: list[bytes], request_ms: float) -> bytes:
     key = args[0]
-    if key in state.lists or key in state.streams:
+    if key in state.lists or key in state.streams or key in state.streams:
         return b"-WRONGTYPE Operation against a key holding the wrong kind of value\r\n"
     if key not in state.cache:
         response = b"$-1\r\n"
     else:
         value, info_ms = state.cache[key]
         if info_ms is None or request_ms - info_ms[0] <= info_ms[1]:
+            if isinstance(value, int):
+                length = value.bit_length() // 8 + 1
+                value = value.to_bytes(length, byteorder='big')
             response = f"${len(value)}\r\n".encode() + value + b"\r\n"
         else:
             del state.cache[key]
