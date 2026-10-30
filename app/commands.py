@@ -632,6 +632,11 @@ class ZSET():
     def __getitem__(self, i):
         return self.ordered[i]
 
+    def __delitem__(self, value):
+        score = self.scores[value]
+        self.ordered.remove((score, value))
+        del self.scores[value]
+
     def get_score(self, value):
         return self.scores[value]
 
@@ -685,3 +690,11 @@ def ZSCORE(args: list[bytes], request_ms: float) -> bytes:
     if value not in sorted_set: return b"$-1\r\n"
     num = sorted_set.get_score(value)
     return f"${len(str(num))}\r\n{num}\r\n".encode()
+
+def ZREM(args: list[bytes], request_ms: float) -> bytes:
+    sorted_set, value = args[:2]
+    if sorted_set not in state.sorted: return b":0\r\n"
+    sorted_set = state.sorted[sorted_set]
+    if value not in sorted_set: return b":0\r\n"
+    del sorted_set[value]
+    return b":1\r\n"
