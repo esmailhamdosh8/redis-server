@@ -721,6 +721,6 @@ def GETBIT(args: list[bytes], request_ms: float) -> bytes:
     if key not in state.cache: return b":0\r\n"
     pos = (offset // 8) * 8 + 7 - (offset % 8)
     val, _ = state.cache[key]
-    val = val if isinstance(val, int) else int.from_bytes(val, byteorder='big')
+    val = val if isinstance(val, int) else int.from_bytes(val, byteorder='little')
     old_bit = (val) & (1 << pos)
     return f":{0 if old_bit == 0 else 1}\r\n".encode()
