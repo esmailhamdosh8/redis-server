@@ -701,24 +701,26 @@ def ZREM(args: list[bytes], request_ms: float) -> bytes:
 
 def SETBIT(args: list[bytes], request_ms: float) -> bytes:
     key, offset, bit = args[0], int(args[1]), args[2]
-    if key in state.lists or key in state.streams:
+    if key in state.lists or key in state.streams or key in state.sorted:
         return b"-WRONGTYPE Operation against a key holding the wrong kind of value\r\n"
     if key not in state.cache:
-        state.cache[key] = 0
+        state.cache[key] = [0, None]
     pos = (offset // 8) * 8 + 7 - (offset % 8)
-    old_bit = (state.cache[key]) & (1 << pos)
+    old_bit = (state.cache[key][0]) & (1 << pos)
     response = f":{0 if old_bit == 0 else 1}\r\n".encode()
     if bit == b"1":
-        state.cache[key] |= (1 << pos)
+        state.cache[key][0] |= (1 << pos)
     else:
-        state.cache[key] &= ~(1 << pos)
+        state.cache[key][0] &= ~(1 << pos)
     return response
 
 def GETBIT(args: list[bytes], request_ms: float) -> bytes:
     key, offset = args[0], int(args[1])
-    if key in state.lists or key in state.streams:
+    if key in state.lists or key in state.streams or key in state.sorted:
         return b"-WRONGTYPE Operation against a key holding the wrong kind of value\r\n"
     if key not in state.cache: return b":0\r\n"
     pos = (offset // 8) * 8 + 7 - (offset % 8)
-    old_bit = (state.cache[key]) & (1 << pos)
+    val, _ = state.cache[key]
+    val = val if isinstance(val, int) else int.from_bytes(val, byteorder='big')
+    old_bit = (val) & (1 << pos)
     return f":{0 if old_bit == 0 else 1}\r\n".encode()
