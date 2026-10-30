@@ -713,3 +713,12 @@ def SETBIT(args: list[bytes], request_ms: float) -> bytes:
     else:
         state.cache[key] &= ~(1 << pos)
     return response
+
+def GETBIT(args: list[bytes], request_ms: float) -> bytes:
+    key, offset = args[0], int(args[1])
+    if key in state.lists or key in state.streams:
+        return b"-WRONGTYPE Operation against a key holding the wrong kind of value\r\n"
+    if key not in state.cache: return b":0\r\n"
+    pos = (offset // 8) * 8 + 7 - (offset % 8)
+    old_bit = (state.cache[key]) & (1 << pos)
+    return f":{0 if old_bit == 0 else 1}\r\n".encode()
