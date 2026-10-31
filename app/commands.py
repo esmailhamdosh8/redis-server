@@ -750,3 +750,13 @@ def BITCOUNT(args: list[bytes], request_ms: float) -> bytes:
     end = min(end, bit_len // 8 + 1) - start + 1
     bit_cnt = ((num >> (start * 8)) & ((1 << (end * 8)) - 1)).bit_count()
     return f":{bit_cnt}\r\n".encode()
+
+def BITOP(args: list[bytes], request_ms: float) -> bytes:
+    op, dst, keys = args[0], args[1], args[2:]
+    if op == b'AND':
+        ans = state.cache[keys[0]][0]
+        for key in keys:
+            ans &= state.cache[key][0]
+        state.cache[dst] = [ans, None]
+    num_bytes = ans.bit_length() // 8 + 1
+    return f":{num_bytes}\r\n".encode()
