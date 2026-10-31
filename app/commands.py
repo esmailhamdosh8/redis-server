@@ -753,10 +753,20 @@ def BITCOUNT(args: list[bytes], request_ms: float) -> bytes:
 
 def BITOP(args: list[bytes], request_ms: float) -> bytes:
     op, dst, keys = args[0], args[1], args[2:]
+    num_bytes = 0
     if op == b'AND':
-        ans = state.cache[keys[0]][0]
+        ans = None
+        stop = False
         for key in keys:
-            ans &= state.cache[key][0]
+            if key not in state.cache:
+                ans = 0
+                stop = True
+                continue
+            num_bytes = max(num_bytes, (state.cache[key][0].bit_length() - 1) // 8 + 1)
+            if stop: continue
+            if ans is None:
+                ans = state.cache[key][0]
+            else:
+                ans &= state.cache[key][0]
         state.cache[dst] = [ans, None]
-    num_bytes = ans.bit_length() // 8 + 1
     return f":{num_bytes}\r\n".encode()
