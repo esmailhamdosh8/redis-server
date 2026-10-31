@@ -727,3 +727,11 @@ def GETBIT(args: list[bytes], request_ms: float) -> bytes:
     val = val if isinstance(val, int) else int.from_bytes(val, byteorder='little')
     old_bit = (val) & (1 << pos)
     return f":{0 if old_bit == 0 else 1}\r\n".encode()
+
+def STRLEN(args: list[bytes], request_ms: float) -> bytes:
+    key = args[0]
+    if key in state.lists or key in state.streams or key in state.sorted:
+        return b"-WRONGTYPE Operation against a key holding the wrong kind of value\r\n"
+    if key not in state.cache: return b":0\r\n"
+    offset = state.cache[key][0].bit_length() - 1
+    return f":{offset // 8 + 1}\r\n".encode()
