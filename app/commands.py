@@ -735,3 +735,18 @@ def STRLEN(args: list[bytes], request_ms: float) -> bytes:
     if key not in state.cache: return b":0\r\n"
     offset = state.cache[key][0].bit_length() - 1
     return f":{offset // 8 + 1}\r\n".encode()
+
+def BITCOUNT(args: list[bytes], request_ms: float) -> bytes:
+    key = args[0]
+    if key in state.lists or key in state.streams or key in state.sorted:
+        return b"-WRONGTYPE Operation against a key holding the wrong kind of value\r\n"
+    if key not in state.cache: return b":0\r\n"
+    num: int = state.cache[key][0]
+    bit_len = num.bit_length() - 1
+    if len(args) == 1:
+        return f":{num.bit_count()}\r\n".encode()
+    start, end = int(args[1]), int(args[2])
+    if start * 8 > bit_len or start > end: return b":0\r\n"
+    end = min(end, bit_len // 8 + 1) - start + 1
+    bit_cnt = ((num >> (start * 8)) & ((1 << (end * 8)) - 1)).bit_count()
+    return f":{bit_cnt}\r\n".encode()
