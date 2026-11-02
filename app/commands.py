@@ -775,6 +775,8 @@ def BITOP(args: list[bytes], request_ms: float) -> bytes:
 
 def GEOADD(args: list[bytes], request_ms: float) -> bytes:
     sorted_set, long, lat, name = args[0], float(args[1]), float(args[2]), args[3]
+    if long < -180 or long > 180 or lat < -85.05112878 or lat > 85.05112878:
+        return f"-ERR invalid longitude,latitude pair {long},{lat}\r\n".encode()
     if sorted_set not in state.sorted:
         state.sorted[sorted_set] = ZSET()
     sorted_set = state.sorted[sorted_set]
