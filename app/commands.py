@@ -772,3 +772,10 @@ def BITOP(args: list[bytes], request_ms: float) -> bytes:
             ans |= state.cache[key][0]
     state.cache[dst] = [ans, None]
     return f":{num_bytes}\r\n".encode()
+
+def GEOADD(args: list[bytes], request_ms: float) -> bytes:
+    sorted_set, long, lat, name = args[0], float(args[1]), float(args[2]), args[3]
+    if sorted_set not in state.sorted:
+        state.sorted[sorted_set] = ZSET()
+    sorted_set = state.sorted[sorted_set]
+    return f":1\r\n".encode()
