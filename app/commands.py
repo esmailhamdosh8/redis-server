@@ -790,6 +790,27 @@ def geo_score(lon, lat):
     lon_bits = int((lon + 180) / 360 * (1 << 26))
     return spread(lat_bits) | (spread(lon_bits) << 1)
 
+def squash(x):  # inverse of spread: remove the 0 bit between every bit
+    x &= 0x5555555555555555
+    x = (x | (x >> 1))  & 0x3333333333333333
+    x = (x | (x >> 2))  & 0x0F0F0F0F0F0F0F0F
+    x = (x | (x >> 4))  & 0x00FF00FF00FF00FF
+    x = (x | (x >> 8))  & 0x0000FFFF0000FFFF
+    x = (x | (x >> 16)) & 0x00000000FFFFFFFF
+    return x
+
+def geo_decode(score):
+    score = int(score)
+    lat_bits = squash(score)        # even positions
+    lon_bits = squash(score >> 1)   # odd positions, shifted down
+
+    lat_lo = lat_bits / (1 << 26) * (2 * LAT_MAX) - LAT_MAX
+    lat_hi = (lat_bits + 1) / (1 << 26) * (2 * LAT_MAX) - LAT_MAX
+    lon_lo = lon_bits / (1 << 26) * 360 - 180
+    lon_hi = (lon_bits + 1) / (1 << 26) * 360 - 180
+
+    return (lon_lo + lon_hi) / 2, (lat_lo + lat_hi) / 2
+
 
 def GEOADD(args: list[bytes], request_ms: float) -> bytes:
     sorted_set, long, lat, name = args[0], float(args[1]), float(args[2]), args[3]
@@ -801,3 +822,18 @@ def GEOADD(args: list[bytes], request_ms: float) -> bytes:
     score = geo_score(long, lat)
     sorted_set.add(name, score)
     return f":1\r\n".encode()
+
+def GEOPOS(args: list[bytes], request_ms: float) -> bytes:
+    sorted_set, names = args[0], args[1:]
+    set_exists = False
+    if sorted_set in state.sorted:
+        set_exists = True
+        sorted_set = state.sorted[sorted_set]
+    response = f"*{len(names)}\r\n".encode()
+    for name in names:
+        if not set_exists or name not in sorted_set: 
+            response += b"*-1\r\n"
+        else:
+            long, lat = geo_decode(sorted_set.get_score(name))
+            response += f"*2\r\n${len(str(long))}\r\n{long}\r\n${len(str(lat))}\r\n{lat}\r\n".encode()
+    return response
