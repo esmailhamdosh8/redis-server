@@ -773,6 +773,24 @@ def BITOP(args: list[bytes], request_ms: float) -> bytes:
     state.cache[dst] = [ans, None]
     return f":{num_bytes}\r\n".encode()
 
+
+LAT_MAX = 85.05112878
+
+def spread(x):  # insert a 0 bit between every bit of a 26-bit number
+    x &= (1 << 26) - 1
+    x = (x | (x << 16)) & 0x0000FFFF0000FFFF
+    x = (x | (x << 8))  & 0x00FF00FF00FF00FF
+    x = (x | (x << 4))  & 0x0F0F0F0F0F0F0F0F
+    x = (x | (x << 2))  & 0x3333333333333333
+    x = (x | (x << 1))  & 0x5555555555555555
+    return x
+
+def geo_score(lon, lat):
+    lat_bits = int((lat + LAT_MAX) / (2 * LAT_MAX) * (1 << 26))
+    lon_bits = int((lon + 180) / 360 * (1 << 26))
+    return spread(lat_bits) | (spread(lon_bits) << 1)
+
+
 def GEOADD(args: list[bytes], request_ms: float) -> bytes:
     sorted_set, long, lat, name = args[0], float(args[1]), float(args[2]), args[3]
     if long < -180 or long > 180 or lat < -85.05112878 or lat > 85.05112878:
@@ -780,4 +798,6 @@ def GEOADD(args: list[bytes], request_ms: float) -> bytes:
     if sorted_set not in state.sorted:
         state.sorted[sorted_set] = ZSET()
     sorted_set = state.sorted[sorted_set]
+    score = geo_score(long, lat)
+    sorted_set.add(name, score)
     return f":1\r\n".encode()
