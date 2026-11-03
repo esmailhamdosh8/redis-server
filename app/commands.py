@@ -888,4 +888,7 @@ def GEOSEARCH(args: list[bytes], request_ms: float) -> bytes:
     return response
 
 def ACL(args: list[bytes], request_ms: float) -> bytes:
-    return b"$7\r\ndefault\r\n"
+    if len(args) == 1:
+        return b"$7\r\ndefault\r\n"
+    else:
+        return b"*2\r\n$5\r\nflags\r\n*0\r\n"
