@@ -891,4 +891,4 @@ def ACL(args: list[bytes], request_ms: float) -> bytes:
     if len(args) == 1:
         return b"$7\r\ndefault\r\n"
     else:
-        return b"*2\r\n$5\r\nflags\r\n*0\r\n"
+        return b"*2\r\n$5\r\nflags\r\n*1\r\n$6\r\nnopass\r\n"
