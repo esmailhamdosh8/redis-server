@@ -886,3 +886,6 @@ def GEOSEARCH(args: list[bytes], request_ms: float) -> bytes:
     for name in matches:
         response += f"${len(name)}\r\n".encode() + name + b"\r\n"
     return response
+
+def ACL(args: list[bytes], request_ms: float) -> bytes:
+    return b"$7\r\ndefault\r\n"
