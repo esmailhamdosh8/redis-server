@@ -640,6 +640,9 @@ class ZSET():
         self.ordered.remove((score, value))
         del self.scores[value]
 
+    def __iter__(self):
+        return iter(self.ordered)
+
     def get_score(self, value):
         return self.scores[value]
 
@@ -856,3 +859,30 @@ def GEODIST(args: list[bytes], request_ms: float) -> bytes:
     long2, lat2 = geo_decode(score2)
     distance = f"{geo_distance(long1, lat1, long2, lat2):.4f}"
     return f"${len(distance)}\r\n{distance}\r\n".encode()
+
+UNIT_TO_METERS = {b"m": 1.0, b"km": 1000.0, b"ft": 0.3048, b"mi": 1609.34}
+
+def GEOSEARCH(args: list[bytes], request_ms: float) -> bytes:
+    sorted_set = args[0]
+    center_lon, center_lat = float(args[2]), float(args[3])
+    radius = float(args[5])
+    unit = args[6].lower()
+
+    if unit not in UNIT_TO_METERS:
+        return b"-ERR unsupported unit provided. please use M, KM, FT, MI\r\n"
+    radius_m = radius * UNIT_TO_METERS[unit]
+
+    if sorted_set not in state.sorted:
+        return b"*0\r\n"
+    sorted_set = state.sorted[sorted_set]
+
+    matches = []
+    for _, name in sorted_set:  # <- adapt to however your ZSET lists members (see note)
+        lon, lat = geo_decode(sorted_set.get_score(name))
+        if geo_distance(center_lon, center_lat, lon, lat) <= radius_m:
+            matches.append(name)
+
+    response = f"*{len(matches)}\r\n".encode()
+    for name in matches:
+        response += f"${len(name)}\r\n".encode() + name + b"\r\n"
+    return response
