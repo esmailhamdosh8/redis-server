@@ -811,6 +811,16 @@ def geo_decode(score):
 
     return (lon_lo + lon_hi) / 2, (lat_lo + lat_hi) / 2
 
+EARTH_RADIUS = 6372797.560856  # meters, the constant Redis uses
+
+def geo_distance(lon1, lat1, lon2, lat2):
+    lon1r, lon2r = math.radians(lon1), math.radians(lon2)
+    lat1r, lat2r = math.radians(lat1), math.radians(lat2)
+    v = math.sin((lon2r - lon1r) / 2)
+    u = math.sin((lat2r - lat1r) / 2)
+    a = u * u + math.cos(lat1r) * math.cos(lat2r) * v * v
+    return 2.0 * EARTH_RADIUS * math.asin(math.sqrt(a))
+
 
 def GEOADD(args: list[bytes], request_ms: float) -> bytes:
     sorted_set, long, lat, name = args[0], float(args[1]), float(args[2]), args[3]
@@ -837,3 +847,12 @@ def GEOPOS(args: list[bytes], request_ms: float) -> bytes:
             long, lat = geo_decode(sorted_set.get_score(name))
             response += f"*2\r\n${len(str(long))}\r\n{long}\r\n${len(str(lat))}\r\n{lat}\r\n".encode()
     return response
+
+def GEODIST(args: list[bytes], request_ms: float) -> bytes:
+    sorted_set, name1, name2 = args[:3]
+    sorted_set = state.sorted[sorted_set]
+    score1, score2 = sorted_set.get_score(name1), sorted_set.get_score(name2)
+    long1, lat1 = geo_decode(score1)
+    long2, lat2 = geo_decode(score2)
+    distance = f"{geo_distance(long1, lat1, long2, lat2):.4f}"
+    return f"${len(distance)}\r\n{distance}\r\n".encode()
