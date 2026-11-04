@@ -776,7 +776,6 @@ def BITOP(args: list[bytes], request_ms: float) -> bytes:
     state.cache[dst] = [ans, None]
     return f":{num_bytes}\r\n".encode()
 
-
 LAT_MAX = 85.05112878
 
 def spread(x):  # insert a 0 bit between every bit of a 26-bit number
@@ -823,7 +822,6 @@ def geo_distance(lon1, lat1, lon2, lat2):
     u = math.sin((lat2r - lat1r) / 2)
     a = u * u + math.cos(lat1r) * math.cos(lat2r) * v * v
     return 2.0 * EARTH_RADIUS * math.asin(math.sqrt(a))
-
 
 def GEOADD(args: list[bytes], request_ms: float) -> bytes:
     sorted_set, long, lat, name = args[0], float(args[1]), float(args[2]), args[3]
@@ -891,4 +889,4 @@ def ACL(args: list[bytes], request_ms: float) -> bytes:
     if len(args) == 1:
         return b"$7\r\ndefault\r\n"
     else:
-        return b"*2\r\n$5\r\nflags\r\n*1\r\n$6\r\nnopass\r\n"
+        return b"*4\r\n$5\r\nflags\r\n*1\r\n$6\r\nnopass\r\n$9\r\npasswords\r\n*0\r\n"
