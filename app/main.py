@@ -72,9 +72,7 @@ def parser(conn, buf: bytes) -> tuple[list[bytes], bytes]:
 def handle_client(conn, respond_type):
     thread_state.user = b"default"
     thread_state.password = None
-    if thread_state.user not in state.users or state.users[thread_state.user] != thread_state.password:
-        conn.sendall(b"-NOAUTH Authentication required.\r\n")
-        return
+    thread_state.auth = thread_state.user in state.users and state.users[thread_state.user] == thread_state.password
     thread_state.in_multi = False
     thread_state.command_queue = []
     thread_state.watched_keys = {}
@@ -143,6 +141,9 @@ def main():
     state.args = parser.parse_args()
     thread_state.in_multi = False
     thread_state.slave_conn = None
+    thread_state.user = b"default"
+    thread_state.password = None
+    thread_state.auth = thread_state.user in state.users and state.users[thread_state.user] == thread_state.password
     state.channels[thread_state.slave_conn] = set()
     process_RDB()
     pre_process()

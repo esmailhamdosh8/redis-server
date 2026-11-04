@@ -13,6 +13,8 @@ from .main import parser
 def build_response(parts: list[bytearray], request_ms: float) -> bytes:
     parts = [bytes(part) for part in parts]
     command, *args = parts
+    if not thread_state.auth and command != b'AUTH':
+        return b"-NOAUTH Authentication required.\r\n"
     if len(state.channels[thread_state.slave_conn]) >= 1 and command not in state.subsc_commands:
         return f"-ERR Can't execute '{command.decode()}': only (P|S)SUBSCRIBE / (P|S)UNSUBSCRIBE / PING / QUIT / RESET are allowed in this context\r\n".encode()
     elif thread_state.in_multi and command not in state.multi_commands:
@@ -908,10 +910,13 @@ def ACL(args: list[bytes], request_ms: float) -> bytes:
         return b"+OK\r\n"
 
 def AUTH(args: list[bytes], request_ms: float) -> bytes:
+    print('hi', flush=True)
     username, password = args[:2]
     digest = hashlib.sha256(password).hexdigest().encode()
+    print(username, state.users, password, 'hi', flush=True)
     if username not in state.users or state.users[username] != digest:
         return b"-WRONGPASS invalid username-password pair or user is disabled.\r\n"
     thread_state.user = username
     thread_state.password = digest
+    thread_state.auth = True
     return b"+OK\r\n"
