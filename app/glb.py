@@ -29,7 +29,7 @@ class State:
 
         self.channels = {}
 
-        self.users = {}
+        self.users = {b'default': None}
 
 
 state = State()

@@ -893,7 +893,7 @@ def ACL(args: list[bytes], request_ms: float) -> bytes:
         return f"${len(user)}\r\n".encode() + user + b"\r\n"
     elif n == 2 and args[0] == b'GETUSER':
         user = args[1]
-        if user in state.users:
+        if user in state.users and state.users[user] is not None:
             nopass = b"*0\r\n"
             user_password = state.users[user]
             password = f"*1\r\n${len(user_password)}\r\n".encode() + user_password + b"\r\n"

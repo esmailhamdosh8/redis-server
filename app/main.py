@@ -70,6 +70,11 @@ def parser(conn, buf: bytes) -> tuple[list[bytes], bytes]:
     return request, chunk
 
 def handle_client(conn, respond_type):
+    thread_state.user = b"default"
+    thread_state.password = None
+    if thread_state.user not in state.users or state.users[thread_state.user] != thread_state.password:
+        conn.sendall(b"-NOAUTH Authentication required.\r\n")
+        return
     thread_state.in_multi = False
     thread_state.command_queue = []
     thread_state.watched_keys = {}
