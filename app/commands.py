@@ -889,7 +889,8 @@ def GEOSEARCH(args: list[bytes], request_ms: float) -> bytes:
 def ACL(args: list[bytes], request_ms: float) -> bytes:
     n = len(args)
     if n == 1 and args[0] == b'WHOAMI':
-        return b"$7\r\ndefault\r\n"
+        user = thread_state.user if hasattr(thread_state, 'user') else b"default"
+        return f"${len(user)}\r\n".encode() + user + b"\r\n"
     elif n == 2 and args[0] == b'GETUSER':
         user = args[1]
         if user in state.users:
@@ -905,3 +906,12 @@ def ACL(args: list[bytes], request_ms: float) -> bytes:
         digest = hashlib.sha256(args[2][1:]).hexdigest().encode()
         state.users[user] = digest
         return b"+OK\r\n"
+
+def AUTH(args: list[bytes], request_ms: float) -> bytes:
+    username, password = args[:2]
+    digest = hashlib.sha256(password).hexdigest().encode()
+    if username not in state.users or state.users[username] != digest:
+        return b"-WRONGPASS invalid username-password pair or user is disabled.\r\n"
+    thread_state.user = username
+    thread_state.password = digest
+    return b"+OK\r\n"
