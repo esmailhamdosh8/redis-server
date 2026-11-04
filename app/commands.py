@@ -6,6 +6,7 @@ import math
 import threading
 import bisect
 import os
+import hashlib
 
 from .main import parser
 
@@ -892,14 +893,15 @@ def ACL(args: list[bytes], request_ms: float) -> bytes:
     elif n == 2 and args[0] == b'GETUSER':
         user = args[1]
         if user in state.users:
-            nopass = ""
+            nopass = b"*0\r\n"
             user_password = state.users[user]
-            password = f"*1\r\n${len(user_password)}\r\n" + user_password + b"\r\n"
+            password = f"*1\r\n${len(user_password)}\r\n".encode() + user_password + b"\r\n"
         else:
-            nopass = "nopass"
+            nopass = b"*1\r\n$6\r\nnopass\r\n"
             password = b"*0\r\n"
-        return f"*4\r\n$5\r\nflags\r\n*1\r\n${len(nopass)}\r\n{nopass}\r\n$9\r\npasswords\r\n".encode() + password
+        return b"*4\r\n$5\r\nflags\r\n" + nopass + b"$9\r\npasswords\r\n" + password
     elif n == 3 and args[0] == b'SETUSER':
         user = args[1]
-        state.users[user] = args[2][1:]
+        digest = hashlib.sha256(args[2][1:]).hexdigest().encode()
+        state.users[user] = digest
         return b"+OK\r\n"
