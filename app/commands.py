@@ -886,7 +886,20 @@ def GEOSEARCH(args: list[bytes], request_ms: float) -> bytes:
     return response
 
 def ACL(args: list[bytes], request_ms: float) -> bytes:
-    if len(args) == 1:
+    n = len(args)
+    if n == 1 and args[0] == b'WHOAMI':
         return b"$7\r\ndefault\r\n"
-    else:
-        return b"*4\r\n$5\r\nflags\r\n*1\r\n$6\r\nnopass\r\n$9\r\npasswords\r\n*0\r\n"
+    elif n == 2 and args[0] == b'GETUSER':
+        user = args[1]
+        if user in state.users:
+            nopass = ""
+            user_password = state.users[user]
+            password = f"*1\r\n${len(user_password)}\r\n" + user_password + b"\r\n"
+        else:
+            nopass = "nopass"
+            password = b"*0\r\n"
+        return f"*4\r\n$5\r\nflags\r\n*1\r\n${len(nopass)}\r\n{nopass}\r\n$9\r\npasswords\r\n".encode() + password
+    elif n == 3 and args[0] == b'SETUSER':
+        user = args[1]
+        state.users[user] = args[2][1:]
+        return b"+OK\r\n"

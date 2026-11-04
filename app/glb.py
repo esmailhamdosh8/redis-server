@@ -29,6 +29,8 @@ class State:
 
         self.channels = {}
 
+        self.users = {}
+
 
 state = State()
 
